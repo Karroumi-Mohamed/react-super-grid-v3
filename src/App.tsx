@@ -1,10 +1,12 @@
-import { useRef } from 'react'
 import { SuperGrid } from './SupperGrid/SuperGrid'
-import type { SuperGridRef } from './SupperGrid/SuperGrid'
 import { TextCell } from './SupperGrid/cells/TextCell'
+import { FocusPlugin } from './SupperGrid/plugins/FocusPlugin'
 import './App.css'
 
 function App() {
+  // Create plugin instances
+  const focusPlugin = new FocusPlugin();
+
   // Sample data
   const data = [
     { name: 'John', age: 30, email: 'john@example.com' },
@@ -44,6 +46,7 @@ function App() {
       <SuperGrid
         data={data}
         config={config}
+        plugins={[focusPlugin]}
       />
     </div>
   )

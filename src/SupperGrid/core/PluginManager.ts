@@ -5,12 +5,14 @@ export class PluginManager implements IPluginManager {
     private initializationOrder: string[] = [];
 
     addPlugin(plugin: BasePlugin): void {
+        console.log(`PluginManager: Adding plugin ${plugin.name}`);
         if (this.plugins.has(plugin.name)) {
             throw new Error(`Plugin ${plugin.name} is already registered`);
         }
 
         this.plugins.set(plugin.name, plugin);
         plugin.setPluginManager(this);
+        console.log(`PluginManager: Plugin ${plugin.name} added successfully`);
     }
 
     removePlugin(pluginName: string): void {
@@ -41,6 +43,11 @@ export class PluginManager implements IPluginManager {
             .filter(plugin => plugin !== undefined) as BasePlugin[];
     }
 
+    // Expose dependency resolution for external use
+    resolvePluginDependencies(): void {
+        this.resolveAndOrderPlugins();
+    }
+
     initializePlugins(): void {
         this.resolveAndOrderPlugins();
         
@@ -61,12 +68,18 @@ export class PluginManager implements IPluginManager {
         const visiting = new Set<string>();
         const order: string[] = [];
 
+        console.log('PluginManager: Starting dependency resolution');
+        console.log('PluginManager: Available plugins:', Array.from(this.plugins.keys()));
+
         const visit = (pluginName: string) => {
+            console.log(`PluginManager: Visiting plugin ${pluginName}`);
+            
             if (visiting.has(pluginName)) {
                 throw new Error(`Circular dependency detected involving plugin: ${pluginName}`);
             }
             
             if (visited.has(pluginName)) {
+                console.log(`PluginManager: Plugin ${pluginName} already visited, skipping`);
                 return;
             }
 
@@ -75,6 +88,7 @@ export class PluginManager implements IPluginManager {
                 throw new Error(`Plugin ${pluginName} is required as a dependency but not found`);
             }
 
+            console.log(`PluginManager: Plugin ${pluginName} has dependencies:`, plugin.dependencies);
             visiting.add(pluginName);
 
             // Visit all dependencies first
@@ -85,15 +99,18 @@ export class PluginManager implements IPluginManager {
             visiting.delete(pluginName);
             visited.add(pluginName);
             order.push(pluginName);
+            console.log(`PluginManager: Added ${pluginName} to order, current order:`, [...order]);
         };
 
         // Visit all plugins to build dependency order
         for (const pluginName of this.plugins.keys()) {
+            console.log(`PluginManager: Checking if ${pluginName} needs visiting, visited:`, visited.has(pluginName));
             if (!visited.has(pluginName)) {
                 visit(pluginName);
             }
         }
 
+        console.log('PluginManager: Final dependency order:', order);
         this.initializationOrder = order;
     }
 

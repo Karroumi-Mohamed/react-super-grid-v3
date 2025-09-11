@@ -1,11 +1,25 @@
-import type { CellCommand, RowCommand, CellId, RowId } from './types';
+import type { CellCommand, RowCommand, CellId, RowId, Cell } from './types';
+
+// Spatial comparison result types
+export type VerticalComparison = {
+    top: CellId;
+    bottom: CellId;
+} | null;
+
+export type HorizontalComparison = {
+    left: CellId;
+    right: CellId;
+} | null;
 
 export interface TablePluginAPIs {
-    createCellCommand(targetId: CellId, command: CellCommand): void;
+    createCellCommand(targetId: CellId, command: Omit<CellCommand, 'targetId' | 'originPlugin' | 'timestamp'>): void;
     createRowCommand<K extends keyof import('./types').RowCommandMap>(
         targetId: RowId, 
-        command: RowCommand<K>
+        command: Omit<RowCommand<K>, 'targetId' | 'originPlugin' | 'timestamp'>
     ): void;
+    getCell(cellId: CellId): Cell | undefined;
+    compareVertical(cellId1: CellId, cellId2: CellId): VerticalComparison;
+    compareHorizontal(cellId1: CellId, cellId2: CellId): HorizontalComparison;
 }
 
 export interface RowPluginAPIs {
@@ -52,9 +66,15 @@ export abstract class BasePlugin {
 
     // API access
     setAPIs(tableAPIs: TablePluginAPIs, rowAPIs: RowPluginAPIs, rowTableAPIs: RowTableAPIs): void {
+        console.log(`BasePlugin: Setting APIs for plugin ${this.name}`, {
+            tableAPIs: !!tableAPIs,
+            rowAPIs: !!rowAPIs,
+            rowTableAPIs: !!rowTableAPIs
+        });
         this.tableAPIs = tableAPIs;
         this.rowAPIs = rowAPIs;
         this.rowTableAPIs = rowTableAPIs;
+        console.log(`BasePlugin: APIs now set for ${this.name}, tableAPIs:`, !!this.tableAPIs);
     }
 
     setPluginManager(manager: PluginManager): void {

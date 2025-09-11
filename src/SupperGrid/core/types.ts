@@ -109,7 +109,10 @@ export type { CellCommand, RowCommand, RowCommandMap };
 type CellCommandHandeler = (command: CellCommand) => void;
 interface TableRowAPI {
     registerCellCommands: (cellId: CellId, handler: CellCommandHandeler) => void;
+    registerCell: (cellId: CellId, cell: Cell) => void;
+    addCellToRow: (cellId: CellId) => void;
     sendMouseEvent: (cellId: CellId, eventName: string, event: MouseEvent) => void;
+    getCellCoordinator: () => CellCoordinatorI;
 }
 
 export type { CellCommandHandeler, TableRowAPI };
@@ -146,6 +149,8 @@ type RowProps<T> = {
     data: T;
     columns: TableConfig<T>;
     tableApis: TableRowAPI;
+    rowIndex: number;
+    isLastRow?: boolean;
 };
 
 export type { RowProps };

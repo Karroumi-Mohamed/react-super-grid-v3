@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import type { TableProps, RowProps, RowId, CellId, CellCommand } from './core/types';
+import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler } from './core/types';
 import { TableCore } from './core/TableCore';
 import type { BasePlugin } from './core/BasePlugin';
+import { v4 as uuidv4 } from 'uuid';
+import { cn } from './core/utils';
 
 interface SuperGridProps<TData> extends TableProps<TData> {
     plugins?: BasePlugin[];
@@ -19,6 +21,7 @@ export interface SuperGridRef {
 
 export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function SuperGrid<TData>({ data, config, plugins = [] }: SuperGridProps<TData>, ref: React.Ref<SuperGridRef>) {
     const tableCoreRef = useRef<TableCore | null>(null);
+    const [tableCoreReady, setTableCoreReady] = useState(false);
 
     // Expose TableCore methods through ref
     useImperativeHandle(ref, () => ({
@@ -56,6 +59,9 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
             // Initialize plugins with their context-aware APIs
             tableCoreRef.current.initializePlugins();
         }
+        console.log('it will be ready');
+
+        setTableCoreReady(true)
 
         return () => {
             // Cleanup on unmount
@@ -63,15 +69,81 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         };
     }, [plugins]);
 
+    // Store row IDs to maintain stable UUIDs and proper linking
+    const rowIdsRef = useRef<RowId[]>([]);
+
+    // Link cells vertically across rows after all rows are rendered
+    useEffect(() => {
+        if (tableCoreReady && tableCoreRef.current && rowIdsRef.current.length > 1) {
+            console.log('SuperGrid: Linking cells vertically across rows');
+
+            const rowRegistry = tableCoreRef.current.getRowRegistry();
+            const coordinator = tableCoreRef.current.getCellCoordinator();
+
+            // Use visual order from rowIdsRef (which matches data array order)
+            for (let i = 0; i < rowIdsRef.current.length - 1; i++) {
+                const currentRowId = rowIdsRef.current[i];     // Visual position i
+                const nextRowId = rowIdsRef.current[i + 1];    // Visual position i+1
+
+                const currentRow = rowRegistry.get(currentRowId);
+                const nextRow = rowRegistry.get(nextRowId);
+
+                console.log(`SuperGrid: Linking row ${i} (${currentRowId.slice(0, 8)}...) to row ${i + 1} (${nextRowId.slice(0, 8)}...)`);
+
+                if (currentRow && nextRow &&
+                    currentRow.cells.length === nextRow.cells.length) {
+                    // Link corresponding cells between visually adjacent rows
+                    coordinator.linkRowsCells(currentRow.cells, nextRow.cells);
+                    console.log(`SuperGrid: Linked ${currentRow.cells.length} cells between rows`);
+                } else {
+                    console.warn(`SuperGrid: Cannot link rows ${i} and ${i + 1} - missing data or cell count mismatch`);
+                }
+            }
+            console.log('SuperGrid: Vertical cell linking completed');
+        }
+    }, [data, tableCoreReady]); // Re-run when data changes or table becomes ready
+
     // Create row components with context-aware APIs
     const renderRows = () => {
+        // Ensure we have stable UUIDs for each row
+        if (rowIdsRef.current.length !== data.length) {
+            // Generate UUIDs for new rows or adjust for removed rows
+            const newRowIds: RowId[] = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < rowIdsRef.current.length) {
+                    newRowIds[i] = rowIdsRef.current[i]; // Keep existing UUID
+                } else {
+                    newRowIds[i] = uuidv4(); // Generate new UUID
+                }
+            }
+            rowIdsRef.current = newRowIds;
+        }
+
         return data.map((rowData, index) => {
-            const rowId: RowId = `row-${index}`; // Generate row ID
+            const rowId: RowId = rowIdsRef.current[index];
+            const isLastRow = index === data.length - 1;
 
             // Create context-aware API for this specific row
-            if(!tableCoreRef.current){
-                throw 'nooooooooo';
+            if (!tableCoreRef.current || !tableCoreReady) {
+                console.log('not created yet');
+                return null
             }
+
+            console.log('created');
+
+            // Create and register the Row object in the row registry
+            const rowObject: import('./core/types').Row<TData> = {
+                spaceId: 'default-space', // For now use default space
+                data: rowData,
+                cells: [], // Will be populated by the row component
+                top: index > 0 ? rowIdsRef.current[index - 1] : null,
+                bottom: index < data.length - 1 ? rowIdsRef.current[index + 1] : null
+            };
+
+            // Register the row object
+            const tableCore = tableCoreRef.current;
+            tableCore.getRowRegistry().register(rowId, rowObject);
+
             const tableApis = tableCoreRef.current.createRowAPI(rowId);
 
             // Create row props with the bound API
@@ -79,7 +151,9 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
                 id: rowId,
                 data: rowData,
                 columns: config,
-                tableApis // This is the context-aware API bound to this row's ID
+                tableApis, // This is the context-aware API bound to this row's ID
+                rowIndex: index, // Pass the row index for spatial coordinates
+                isLastRow // Pass whether this is the last row
             };
 
             return <GridRow key={rowId} {...rowProps} />;
@@ -87,19 +161,46 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
     };
 
     return (
-        <div className="w-fit">
-            <div className="w-full flex ">
-                {/* Header rendering logic */}
+        <div
+            className="w-fit"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                // Send keyboard events to the focused cell if one exists
+                if (tableCoreRef.current) {
+                    const focusedCellId = tableCoreRef.current.getFocusedCellId?.();
+                    if (focusedCellId) {
+                        tableCoreRef.current.convertKeyboardEventToCommand(focusedCellId, 'keydown', e.nativeEvent);
+                    }
+                }
+            }}
+            onKeyUp={(e) => {
+                // Send keyboard events to the focused cell if one exists
+                if (tableCoreRef.current) {
+                    const focusedCellId = tableCoreRef.current.getFocusedCellId?.();
+                    if (focusedCellId) {
+                        tableCoreRef.current.convertKeyboardEventToCommand(focusedCellId, 'keyup', e.nativeEvent);
+                    }
+                }
+            }}
+        >
+            {/* Header row */}
+            <div className="flex">
                 {config.map((col, index) => (
                     <div
                         key={index}
-                        className="header-cell p-2 font-semibold bg-gray-100 ring"
-                        style={{ width: col.width }}
+                        className={cn(
+                            'border-neutral-200 border-[0.5px] h-10 inset-0 box-border',
+                            'ring-[0.5px] ring-inset ring-transparent'
+                        )}
+                        style={{ width: `calc(${col.width} + 1px)` }}
                     >
-                        {col.header}
+                        <div className="h-full w-full flex justify-start items-center p-2 bg-stone-50 hover:bg-stone-100 hover:ring-stone-800 ring-transparent ring-[0.5px]">
+                            {col.header}
+                        </div>
                     </div>
                 ))}
             </div>
+            {/* Data rows */}
             <div className="w-full">
                 {renderRows()}
             </div>
@@ -108,11 +209,21 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
 });
 
 // Row component that uses the context-aware TableRowAPI
-function GridRow<TData>({ id, data, columns, tableApis }: RowProps<TData>) {
+function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TData>) {
+    // Generate stable cell IDs with spatial coordinates (only once per row instance)
+    const cellIdsRef = useRef<CellId[]>([]);
+
+    // Initialize cell IDs with spatial coordinates if not already done
+    if (cellIdsRef.current.length !== columns.length) {
+        cellIdsRef.current = columns.map((_, colIndex) =>
+            `${colIndex.toString().padStart(2, '0')}-${rowIndex.toString().padStart(2, '0')}-${uuidv4()}`
+            // Example: "01-02-a1b2c3d4-e5f6-7890-abcd-ef1234567890" (col=1, row=2)
+        );
+    }
 
     // Row creates cell-specific registerCommands functions
     const createCellRegisterFunction = (cellId: string) => {
-        return (handler: import('./core/types').CellCommandHandeler) => {
+        return (handler: CellCommandHandeler) => {
             // Row uses TableRowAPI to register the cell with the table
             tableApis.registerCellCommands(cellId, handler);
         };
@@ -121,8 +232,23 @@ function GridRow<TData>({ id, data, columns, tableApis }: RowProps<TData>) {
     return (
         <div className="w-full flex" data-row-id={id}>
             {columns.map((column, index) => {
-                const cellId = `${id}-cell-${index}`;
+                const cellId = cellIdsRef.current[index];
                 const cellValue = data[column.key];
+                const previousCellId = index > 0 ? cellIdsRef.current[index - 1] : null;
+                const nextCellId = index < columns.length - 1 ? cellIdsRef.current[index + 1] : null;
+
+                // Create Cell object with spatial coordinates
+                const cellObject: Cell = {
+                    rowId: id,
+                    top: null,        // Will be linked after all rows are created
+                    bottom: null,     // Will be linked after all rows are created
+                    left: previousCellId,   // Link to the previous cell in this row
+                    right: nextCellId       // Link to the next cell in this row
+                };
+
+                // Register the cell object and add to row
+                tableApis.registerCell(cellId, cellObject);
+                tableApis.addCellToRow(cellId);
 
                 // Create cell-specific registerCommands function
                 const cellRegisterCommands = createCellRegisterFunction(cellId);
@@ -140,9 +266,11 @@ function GridRow<TData>({ id, data, columns, tableApis }: RowProps<TData>) {
                 return (
                     <div
                         key={cellId}
-                        className="ring"
+                        className={cn(
+                            'border-[0.5px] border-neutral-200 inset-0 box-border'
+                        )}
                         data-cell-id={cellId}
-                        style={{ width: column.width }}
+                        style={{ width: `calc(${column.width} + 1px)` }}
                         onClick={(e) => tableApis.sendMouseEvent(cellId, 'click', e.nativeEvent)}
                         onDoubleClick={(e) => tableApis.sendMouseEvent(cellId, 'dblclick', e.nativeEvent)}
                         onContextMenu={(e) => tableApis.sendMouseEvent(cellId, 'contextmenu', e.nativeEvent)}
@@ -151,7 +279,9 @@ function GridRow<TData>({ id, data, columns, tableApis }: RowProps<TData>) {
                         onMouseEnter={(e) => tableApis.sendMouseEvent(cellId, 'mouseenter', e.nativeEvent)}
                         onMouseLeave={(e) => tableApis.sendMouseEvent(cellId, 'mouseleave', e.nativeEvent)}
                     >
-                        <CellComponent {...cellProps} />
+                        <div className="h-full w-full">
+                            <CellComponent {...cellProps} />
+                        </div>
                     </div>
                 );
             })}
