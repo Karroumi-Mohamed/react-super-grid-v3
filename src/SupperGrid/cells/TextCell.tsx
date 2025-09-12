@@ -17,7 +17,7 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
     // Initialize state only once, ignore future prop changes
     const [internalValue, setInternalValue] = useState(() => value || '');
     const [isFocused, setIsFocused] = useState(false);
-    const [isSelected, setIsSelected] = useState(false);
+    const [_isSelected, _setIsSelected] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +35,11 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
                     break;
 
                 case 'select':
-                    setIsSelected(true);
+                    _setIsSelected(true);
                     break;
 
                 case 'unselect':
-                    setIsSelected(false);
+                    _setIsSelected(false);
                     break;
 
                 case 'edit':

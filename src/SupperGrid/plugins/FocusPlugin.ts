@@ -1,4 +1,4 @@
-import { BasePlugin, type TablePluginAPIs } from '../core/BasePlugin';
+import { BasePlugin } from '../core/BasePlugin';
 import type { CellCommand, RowCommand, CellId, RowCommandMap } from '../core/types';
 
 export class FocusPlugin extends BasePlugin {
@@ -6,6 +6,7 @@ export class FocusPlugin extends BasePlugin {
     readonly version = '1.0.0';
 
     private focusedCell: CellId | null = null;
+    // private anchorCell: CellId | null = null; // TODO: Implement selection anchor
 
     onInit(): void {
         console.log('FocusPlugin: Initialized');
@@ -24,11 +25,24 @@ export class FocusPlugin extends BasePlugin {
             return true; // Allow command to continue
         }
 
-        if (name === 'click') {
+        // Handle cell-specific commands (with targetId)
+        if (targetId && name === 'click') {
             this.focusCell(targetId);
         }
 
-        // Allow all commands to continue
+        // Handle keyboard commands without targetId (plugin-only)
+        if (!targetId && name === 'keydown') {
+            const event = command.payload.event;
+            console.log('Keyboard command received:', event.key);
+
+            if (this.isArrow(event.key)) {
+                event.preventDefault();
+                this.handleNavigation(event.key);
+                return false; // Block further processing - we handled it
+            }
+        }
+
+        // Allow all other commands to continue
         return true;
     }
 
@@ -36,9 +50,33 @@ export class FocusPlugin extends BasePlugin {
         // For now, just allow all row commands
         return true;
     }
+
+    private handleNavigation(direction: string) {
+        if (!this.focusedCell) return;
+        switch (direction) {
+            case 'ArrowUp':
+                const top = this.tableAPIs?.getCell(this.focusedCell)?.top
+                if (top) {
+                   this.focusCell(top)
+                }
+                break;
+
+            default:
+                break;
+        }
+
+    }
+
+    private isArrow(key: string) {
+        return ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key);
+    }
+
+    private blurCell(id: CellId) {
+        this.tableAPIs?.createCellCommand(id, { name: 'blur' })
+    }
     private focusCell(id: CellId): void {
         if (this.focusedCell) {
-            this.tableAPIs?.createCellCommand(this.focusedCell, { name: 'blur' })
+            this.blurCell(this.focusedCell);
         }
         this.focusedCell = id;
         this.tableAPIs?.createCellCommand(id, { name: 'focus' })

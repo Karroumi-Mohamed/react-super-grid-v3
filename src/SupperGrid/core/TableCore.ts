@@ -4,13 +4,13 @@ import type {
   CellId, 
   RowId, 
   CellCommandHandeler,
-  RowCommandMap 
+  RowCommandMap,
 } from './types';
 import type { TablePluginAPIs, RowPluginAPIs, RowTableAPIs } from './BasePlugin';
 import { CellCommandRegistry, RowCommandRegistry } from './CommandRegistry';
 import { PluginManager } from './PluginManager';
 import type { BasePlugin } from './BasePlugin';
-import { CellRegistry, RowRegistry, SpaceRegistry } from './Registries';
+import { CellRegistry, RowRegistry } from './Registries';
 import { CellCoordinator } from './CellCordinator';
 
 export class TableCore {
@@ -19,9 +19,8 @@ export class TableCore {
   private pluginManager: PluginManager;
   private cellRegistry: CellRegistry;
   private rowRegistry: RowRegistry<any>;
-  private spaceRegistry: SpaceRegistry;
+  // private spaceRegistry: SpaceRegistry; // TODO: Implement space management
   private cellCoordinator: CellCoordinator;
-  private focusedCellId: CellId | null = null;
 
   constructor() {
     this.cellCommandRegistry = new CellCommandRegistry();
@@ -29,7 +28,7 @@ export class TableCore {
     this.pluginManager = new PluginManager();
     this.cellRegistry = CellRegistry.getInstance();
     this.rowRegistry = RowRegistry.getInstance();
-    this.spaceRegistry = SpaceRegistry.getInstance();
+    // this.spaceRegistry = SpaceRegistry.getInstance(); // TODO: Implement space management
     this.cellCoordinator = CellCoordinator.getInstance(this.cellRegistry);
   }
 
@@ -220,35 +219,34 @@ export class TableCore {
     this.rowCommandRegistry.dispatch(command);
   }
 
-  // Convert DOM events to commands
-  convertKeyboardEventToCommand(cellId: CellId, eventName: string, event: KeyboardEvent): void {
-    let command: CellCommand;
+  // Dispatch keyboard commands without targetId (plugin-only)
+  dispatchKeyboardCommand(eventName: string, event: KeyboardEvent): void {
+    let keyboardCommand: CellCommand;
 
     switch (eventName) {
       case 'keydown':
-        command = {
+        keyboardCommand = {
           name: 'keydown',
-          targetId: cellId,
+          // No targetId - this command won't reach any individual cells
           payload: { event },
           timestamp: Date.now()
         };
         break;
-
       case 'keyup':
-        command = {
+        keyboardCommand = {
           name: 'keyup',
-          targetId: cellId,
+          // No targetId - this command won't reach any individual cells  
           payload: { event },
           timestamp: Date.now()
         };
         break;
-
       default:
         console.warn(`Unknown keyboard event: ${eventName}`);
         return;
     }
 
-    this.dispatchCellCommand(command);
+    // Dispatch to cell command registry - plugins will see it, cells won't
+    this.cellCommandRegistry.dispatch(keyboardCommand);
   }
 
   private convertMouseEventToCommand(cellId: CellId, eventName: string, event: MouseEvent): void {
@@ -328,7 +326,6 @@ export class TableCore {
 
   // Convenience methods for common commands
   focusCell(cellId: CellId): void {
-    this.focusedCellId = cellId;
     this.dispatchCellCommand({
       name: 'focus',
       targetId: cellId,
@@ -337,9 +334,6 @@ export class TableCore {
   }
 
   blurCell(cellId: CellId): void {
-    if (this.focusedCellId === cellId) {
-      this.focusedCellId = null;
-    }
     this.dispatchCellCommand({
       name: 'blur',
       targetId: cellId,
@@ -393,7 +387,4 @@ export class TableCore {
     return this.pluginManager;
   }
 
-  getFocusedCellId(): CellId | null {
-    return this.focusedCellId;
-  }
 }

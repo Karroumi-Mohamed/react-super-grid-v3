@@ -76,14 +76,15 @@ type CellCommandWithPayload =
   | { name: "mouseLeave"; payload: { event: MouseEvent } }
   | { name: "error"; payload: { error: any } };
 
+
 type CellCommand =
   | (CellCommandNoPayload & {
-      targetId: CellId;
+      targetId?: CellId; // Optional - commands without targetId are plugin-only
       originPlugin?: string;
       timestamp?: number;
     })
   | (CellCommandWithPayload & {
-      targetId: CellId;
+      targetId?: CellId; // Optional - commands without targetId are plugin-only
       originPlugin?: string;
       timestamp?: number;
     });

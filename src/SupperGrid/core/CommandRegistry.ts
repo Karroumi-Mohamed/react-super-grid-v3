@@ -17,6 +17,7 @@ export class CellCommandRegistry {
         this.handlers.delete(cellId);
     }
 
+
     dispatch(command: CellCommand): void {
         // Set timestamp if not provided
         if (!command.timestamp) {
@@ -29,8 +30,11 @@ export class CellCommandRegistry {
             return; // Command was blocked by a plugin
         }
 
-        // Deliver to cell if command passed plugin chain
-        this.deliverToCell(command);
+        // Only deliver to cell if command has a targetId
+        if (command.targetId) {
+            this.deliverToCell(command);
+        }
+        // Commands without targetId are plugin-only and stop here
     }
 
     private runPluginChain(command: CellCommand): boolean {
@@ -54,6 +58,8 @@ export class CellCommandRegistry {
     }
 
     private deliverToCell(command: CellCommand): void {
+        if (!command.targetId) return; // Should not happen due to dispatch logic, but safety check
+        
         const handler = this.handlers.get(command.targetId);
         if (handler) {
             try {
@@ -160,3 +166,4 @@ export class RowCommandRegistry {
         }
     }
 }
+

@@ -50,7 +50,6 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         if (!tableCoreRef.current) {
             tableCoreRef.current = new TableCore();
 
-
             // Add plugins
             plugins.forEach(plugin => {
                 tableCoreRef.current!.addPlugin(plugin);
@@ -59,12 +58,30 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
             // Initialize plugins with their context-aware APIs
             tableCoreRef.current.initializePlugins();
         }
-        console.log('it will be ready');
 
-        setTableCoreReady(true)
+        setTableCoreReady(true);
+
+        // Document-level keyboard event listeners
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (tableCoreRef.current) {
+                tableCoreRef.current.dispatchKeyboardCommand('keydown', event);
+            }
+        };
+
+        const handleKeyUp = (event: KeyboardEvent) => {
+            if (tableCoreRef.current) {
+                tableCoreRef.current.dispatchKeyboardCommand('keyup', event);
+            }
+        };
+
+        // Add listeners to document
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
 
         return () => {
             // Cleanup on unmount
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keyup', handleKeyUp);
             tableCoreRef.current?.destroy();
         };
     }, [plugins]);
@@ -161,28 +178,7 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
     };
 
     return (
-        <div
-            className="w-fit"
-            tabIndex={0}
-            onKeyDown={(e) => {
-                // Send keyboard events to the focused cell if one exists
-                if (tableCoreRef.current) {
-                    const focusedCellId = tableCoreRef.current.getFocusedCellId?.();
-                    if (focusedCellId) {
-                        tableCoreRef.current.convertKeyboardEventToCommand(focusedCellId, 'keydown', e.nativeEvent);
-                    }
-                }
-            }}
-            onKeyUp={(e) => {
-                // Send keyboard events to the focused cell if one exists
-                if (tableCoreRef.current) {
-                    const focusedCellId = tableCoreRef.current.getFocusedCellId?.();
-                    if (focusedCellId) {
-                        tableCoreRef.current.convertKeyboardEventToCommand(focusedCellId, 'keyup', e.nativeEvent);
-                    }
-                }
-            }}
-        >
+        <div className="w-fit">
             {/* Header row */}
             <div className="flex">
                 {config.map((col, index) => (
