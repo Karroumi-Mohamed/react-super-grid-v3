@@ -9,6 +9,21 @@ export class FocusPlugin extends BasePlugin {
 
     onInit(): void {
         console.log('FocusPlugin: Initialized');
+        
+        // Example: Delete first row after 5 seconds
+        setTimeout(() => {
+            console.log('FocusPlugin: Attempting to delete first row after 5s...');
+            if (this.tableAPIs) {
+                const rowIds = this.tableAPIs.getRowIds();
+                if (rowIds.length > 0) {
+                    const firstRowId = rowIds[0];
+                    console.log(`FocusPlugin: Deleting first row: ${firstRowId}`);
+                    this.tableAPIs.deleteRow(firstRowId);
+                } else {
+                    console.log('FocusPlugin: No rows found to delete');
+                }
+            }
+        }, 5000);
     }
 
     onDestroy(): void {

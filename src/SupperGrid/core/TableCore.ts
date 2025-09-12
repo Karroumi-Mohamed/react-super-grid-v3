@@ -115,6 +115,16 @@ export class TableCore {
         } else {
           return { left: cellId2, right: cellId1 };
         }
+      },
+
+      deleteRow: (rowId: RowId) => {
+        // Direct access to destroyRow method - plugins can delete rows safely
+        this.destroyRow(rowId);
+      },
+
+      getRowIds: (): RowId[] => {
+        // Get all row IDs from registry
+        return this.rowRegistry.list();
       }
     };
   }
@@ -156,6 +166,18 @@ export class TableCore {
       getCellCoordinator: () => {
         // Provide access to spatial coordination methods
         return this.cellCoordinator;
+      },
+
+      registerRowHandler: (handler: import('./types').RowCommandHandler) => {
+        // Register row command handler for this specific row
+        this.rowCommandRegistry.register(rowId, handler);
+        console.log(`Row ${rowId} registered row command handler`);
+      },
+
+      unregisterRowHandler: () => {
+        // Unregister row command handler
+        this.rowCommandRegistry.unregister(rowId);
+        console.log(`Row ${rowId} unregistered row command handler`);
       }
     };
   }
@@ -390,6 +412,72 @@ export class TableCore {
 
   getPluginManager(): PluginManager {
     return this.pluginManager;
+  }
+
+  // Row destruction with automatic cell cleanup
+  destroyRow(rowId: RowId): void {
+    console.log(`TableCore: Destroying row ${rowId}`);
+    
+    const row = this.rowRegistry.get(rowId);
+    if (!row) {
+      console.warn(`TableCore: Row ${rowId} not found for destruction`);
+      return;
+    }
+    
+    // 1. Clean up cell registrations (React handles component unmounting)
+    row.cells.forEach(cellId => {
+      this.cellCommandRegistry.unregister(cellId);
+      this.cellRegistry.unregister(cellId);
+      console.log(`TableCore: Cleaned up cell ${cellId} from destroyed row`);
+    });
+    
+    // 2. Fix spatial navigation - link neighboring rows
+    const topRowId = row.top;
+    const bottomRowId = row.bottom;
+    
+    if (topRowId && bottomRowId) {
+      console.log(`TableCore: Connecting top row ${topRowId} to bottom row ${bottomRowId}`);
+      // Connect top row directly to bottom row
+      this.cellCoordinator.linkRows(topRowId, bottomRowId);
+      
+      // Link cells between top and bottom rows (skip destroyed row)
+      const topRow = this.rowRegistry.get(topRowId);
+      const bottomRow = this.rowRegistry.get(bottomRowId);
+      if (topRow && bottomRow) {
+        this.cellCoordinator.linkRowsCells(topRow.cells, bottomRow.cells);
+        console.log(`TableCore: Linked ${topRow.cells.length} cells between neighboring rows`);
+      }
+    } else if (topRowId) {
+      // This was the last row - clear bottom reference from top row
+      const topRow = this.rowRegistry.get(topRowId);
+      if (topRow) {
+        topRow.bottom = null;
+        this.rowRegistry.register(topRowId, topRow);
+        console.log(`TableCore: Cleared bottom reference from top row ${topRowId}`);
+      }
+    } else if (bottomRowId) {
+      // This was the first row - clear top reference from bottom row
+      const bottomRow = this.rowRegistry.get(bottomRowId);
+      if (bottomRow) {
+        bottomRow.top = null;
+        this.rowRegistry.register(bottomRowId, bottomRow);
+        console.log(`TableCore: Cleared top reference from bottom row ${bottomRowId}`);
+      }
+    }
+    
+    // 3. Send destroy command to row component
+    this.dispatchRowCommand({
+      name: 'destroy',
+      targetId: rowId,
+      payload: {},
+      timestamp: Date.now()
+    });
+    
+    // 4. Clean up row registrations
+    this.rowCommandRegistry.unregister(rowId);
+    this.rowRegistry.unregister(rowId);
+    
+    console.log(`TableCore: Row ${rowId} destruction completed`);
   }
 
 }

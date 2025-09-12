@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler } from './core/types';
+import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler, RowCommandHandler } from './core/types';
 import { TableCore } from './core/TableCore';
 import type { BasePlugin } from './core/BasePlugin';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,6 +16,7 @@ export interface SuperGridRef {
     selectCell: (cellId: CellId) => void;
     editCell: (cellId: CellId) => void;
     updateCellValue: (cellId: CellId, value: any) => void;
+    destroyRow: (rowId: RowId) => void;
     getTableCore: () => TableCore | null;
 }
 
@@ -42,6 +43,9 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         },
         updateCellValue: (cellId: CellId, value: any) => {
             tableCoreRef.current?.updateCellValue(cellId, value);
+        },
+        destroyRow: (rowId: RowId) => {
+            tableCoreRef.current?.destroyRow(rowId);
         },
         getTableCore: () => tableCoreRef.current
     }), []);
@@ -206,6 +210,13 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
 
 // Row component that uses the context-aware TableRowAPI
 function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TData>) {
+    const [isDestroyed, setIsDestroyed] = useState(false);
+    const renderCountRef = useRef(0);
+    
+    // Increment render counter and log
+    renderCountRef.current += 1;
+    console.log(`GridRow ${id.slice(0, 8)}... render #${renderCountRef.current} (rowIndex: ${rowIndex})`);
+    
     // Generate stable cell IDs with spatial coordinates (only once per row instance)
     const cellIdsRef = useRef<CellId[]>([]);
 
@@ -217,6 +228,28 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
         );
     }
 
+    // Register row command handler
+    useEffect(() => {
+        const handleRowCommand: RowCommandHandler = (command) => {
+            console.log(`GridRow ${id}: Received row command:`, command.name);
+            switch (command.name) {
+                case 'destroy':
+                    console.log(`GridRow ${id}: Destroying row`);
+                    setIsDestroyed(true);
+                    break;
+                default:
+                    console.log(`GridRow ${id}: Unhandled row command:`, command.name);
+                    break;
+            }
+        };
+        
+        tableApis.registerRowHandler(handleRowCommand);
+        
+        return () => {
+            tableApis.unregisterRowHandler();
+        };
+    }, [id, tableApis]);
+
     // Row creates cell-specific registerCommands functions
     const createCellRegisterFunction = (cellId: string) => {
         return (handler: CellCommandHandeler) => {
@@ -224,6 +257,12 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
             tableApis.registerCellCommands(cellId, handler);
         };
     };
+
+    // If row is destroyed, render nothing (React will unmount all child cells)
+    if (isDestroyed) {
+        console.log(`GridRow ${id.slice(0, 8)}... render #${renderCountRef.current} - DESTROYED, returning null`);
+        return null;
+    }
 
     return (
         <div className="w-full flex" data-row-id={id}>

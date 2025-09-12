@@ -91,6 +91,7 @@ type CellCommand =
 
 type RowCommandMap = {
   delete: {};
+  destroy: {};
   linkToTop: { targetRowId: RowId };
   linkToBottom: { targetRowId: RowId };
   error: { error: any };
@@ -108,15 +109,19 @@ export type { CellCommand, RowCommand, RowCommandMap };
 
 
 type CellCommandHandeler = (command: CellCommand) => void;
+type RowCommandHandler = (command: RowCommand<any>) => void;
+
 interface TableRowAPI {
     registerCellCommands: (cellId: CellId, handler: CellCommandHandeler) => void;
     registerCell: (cellId: CellId, cell: Cell) => void;
     addCellToRow: (cellId: CellId) => void;
     sendMouseEvent: (cellId: CellId, eventName: string, event: MouseEvent) => void;
     getCellCoordinator: () => CellCoordinatorI;
+    registerRowHandler: (handler: RowCommandHandler) => void;
+    unregisterRowHandler: () => void;
 }
 
-export type { CellCommandHandeler, TableRowAPI };
+export type { CellCommandHandeler, RowCommandHandler, TableRowAPI };
 
 /// components
 interface BaseCellConfig {

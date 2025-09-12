@@ -21,6 +21,8 @@ export interface TablePluginAPIs {
     getRow(rowId: RowId): import('./types').Row<any> | undefined;
     compareVertical(cellId1: CellId, cellId2: CellId): VerticalComparison;
     compareHorizontal(cellId1: CellId, cellId2: CellId): HorizontalComparison;
+    deleteRow(rowId: RowId): void;
+    getRowIds(): RowId[];
 }
 
 export interface RowPluginAPIs {
