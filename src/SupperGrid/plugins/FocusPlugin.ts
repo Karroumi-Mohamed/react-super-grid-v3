@@ -6,7 +6,6 @@ export class FocusPlugin extends BasePlugin {
     readonly version = '1.0.0';
 
     private focusedCell: CellId | null = null;
-    // private anchorCell: CellId | null = null; // TODO: Implement selection anchor
 
     onInit(): void {
         console.log('FocusPlugin: Initialized');
@@ -38,7 +37,7 @@ export class FocusPlugin extends BasePlugin {
             if (this.isArrow(event.key)) {
                 event.preventDefault();
                 this.handleNavigation(event.key);
-                return false; // Block further processing - we handled it
+                return true; // Block further processing - we handled it
             }
         }
 
@@ -60,6 +59,26 @@ export class FocusPlugin extends BasePlugin {
                    this.focusCell(top)
                 }
                 break;
+            case 'ArrowDown':
+                const bottom = this.tableAPIs?.getCell(this.focusedCell)?.bottom
+                if (bottom) {
+                   this.focusCell(bottom)
+                }
+                break;
+            case 'ArrowLeft':
+                const left = this.tableAPIs?.getCell(this.focusedCell)?.left
+                if (left) {
+                   this.focusCell(left)
+                }
+                break;
+            case 'ArrowRight':
+                const right = this.tableAPIs?.getCell(this.focusedCell)?.right
+                if (right) {
+                   this.focusCell(right)
+                }
+                break;
+
+
 
             default:
                 break;
@@ -82,4 +101,7 @@ export class FocusPlugin extends BasePlugin {
         this.tableAPIs?.createCellCommand(id, { name: 'focus' })
     }
 
+    public getFocused(): CellId | null{
+        return this.focusedCell;
+    }
 }

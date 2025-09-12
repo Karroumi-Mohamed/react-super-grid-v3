@@ -64,6 +64,11 @@ export class TableCore {
         return this.cellRegistry.get(cellId);
       },
 
+      getRow: (rowId: RowId) => {
+        // Access row object with cells array and spatial data
+        return this.rowRegistry.get(rowId);
+      },
+
       compareVertical: (cellId1: CellId, cellId2: CellId): import('./BasePlugin').VerticalComparison => {
         // Parse coordinates from cell UUIDs: "colIndex-rowIndex-uuid"
         const parseCoords = (cellId: CellId) => {

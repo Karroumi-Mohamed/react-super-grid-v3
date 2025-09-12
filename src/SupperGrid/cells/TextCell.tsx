@@ -17,7 +17,7 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
     // Initialize state only once, ignore future prop changes
     const [internalValue, setInternalValue] = useState(() => value || '');
     const [isFocused, setIsFocused] = useState(false);
-    const [_isSelected, _setIsSelected] = useState(false);
+    const [isSelected, setIsSelected] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +35,11 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
                     break;
 
                 case 'select':
-                    _setIsSelected(true);
+                    setIsSelected(true);
                     break;
 
                 case 'unselect':
-                    _setIsSelected(false);
+                    setIsSelected(false);
                     break;
 
                 case 'edit':
@@ -97,8 +97,14 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
         <div
             className={cn(
                 'p-2 transition-colors',
-                isFocused ? 'ring-neutral-800 bg-neutral-100 ring-[0.5px]' : '',
-                config.readOnly && 'bg-gray-100 cursor-not-allowed'
+                config.readOnly && 'bg-gray-100 cursor-not-allowed',
+                isSelected && isFocused
+                    ? 'bg-blue-100 ring-blue-400 ring-[0.5px]' // hybrid state
+                    : isSelected
+                        ? 'bg-blue-50 ring-blue-400 ring-[0.5px]'
+                        : isFocused
+                            ? 'bg-neutral-100 ring-neutral-800 ring-[0.5px]'
+                            : ''
             )}
             data-cell-id={id}
             style={{ width: config.width }}

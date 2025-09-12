@@ -2,10 +2,12 @@ import { SuperGrid } from './SupperGrid/SuperGrid'
 import { TextCell } from './SupperGrid/cells/TextCell'
 import { FocusPlugin } from './SupperGrid/plugins/FocusPlugin'
 import './App.css'
+import { SelectPlugin } from './SupperGrid/plugins/SelectionPlugin';
 
 function App() {
   // Create plugin instances
   const focusPlugin = new FocusPlugin();
+const selectPlugin = new SelectPlugin();
 
   // Sample data
   const data = [
@@ -46,7 +48,7 @@ function App() {
       <SuperGrid
         data={data}
         config={config}
-        plugins={[focusPlugin]}
+        plugins={[focusPlugin, selectPlugin]}
       />
     </div>
   )

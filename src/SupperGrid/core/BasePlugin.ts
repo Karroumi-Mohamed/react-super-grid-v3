@@ -18,6 +18,7 @@ export interface TablePluginAPIs {
         command: Omit<RowCommand<K>, 'targetId' | 'originPlugin' | 'timestamp'>
     ): void;
     getCell(cellId: CellId): Cell | undefined;
+    getRow(rowId: RowId): import('./types').Row<any> | undefined;
     compareVertical(cellId1: CellId, cellId2: CellId): VerticalComparison;
     compareHorizontal(cellId1: CellId, cellId2: CellId): HorizontalComparison;
 }
