@@ -6,6 +6,7 @@ export class SelectPlugin extends BasePlugin {
     readonly name = "selection";
     readonly version: string = "1.0.0";
     readonly dependencies: string[] = ['focus-plugin'];
+    readonly processLast: boolean = false;
 
     private focusPlugin: FocusPlugin | null = null;
     private anchorCell: CellId | null = null; // TODO: Implement selection anchor

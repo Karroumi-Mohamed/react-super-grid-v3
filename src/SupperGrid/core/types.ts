@@ -5,6 +5,8 @@ type CellId = string;
 type Space = {
     name: string;
     owner?: string; // plugin name or table if no owner
+    top: SpaceId | null;
+    bottom: SpaceId | null;
 };
 
 type Row<T> = {

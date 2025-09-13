@@ -1,4 +1,4 @@
-import type { CellCommand, RowCommand, CellId, RowId, Cell } from './types';
+import type { CellCommand, RowCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
 
 // Spatial comparison result types
 export type VerticalComparison = {
@@ -23,6 +23,10 @@ export interface TablePluginAPIs {
     compareHorizontal(cellId1: CellId, cellId2: CellId): HorizontalComparison;
     deleteRow(rowId: RowId): void;
     getRowIds(): RowId[];
+    getSpaceAbove(spaceId: SpaceId): SpaceId | null;
+    getSpaceBelow(spaceId: SpaceId): SpaceId | null;
+    getSpace(spaceId: SpaceId): Space | undefined;
+    getMySpace(): SpaceId;
 }
 
 export interface RowPluginAPIs {
@@ -46,6 +50,7 @@ export abstract class BasePlugin {
     abstract readonly name: string;
     abstract readonly version: string;
     readonly dependencies: string[] = [];
+    readonly processLast: boolean = false;
 
     protected pluginManager: PluginManager | null = null;
     protected tableAPIs: TablePluginAPIs | null = null;

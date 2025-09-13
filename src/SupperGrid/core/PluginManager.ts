@@ -64,15 +64,73 @@ export class PluginManager implements IPluginManager {
     }
 
     private resolveAndOrderPlugins(): void {
+        console.log('PluginManager: Starting dependency resolution with processLast support');
+        console.log('PluginManager: Available plugins:', Array.from(this.plugins.keys()));
+
+        // Step 1: Separate plugins by their initial processLast flag
+        const initialProcessLastPlugins = new Set<string>();
+        const allPlugins = new Map<string, BasePlugin>();
+
+        for (const [pluginName, plugin] of this.plugins.entries()) {
+            allPlugins.set(pluginName, plugin);
+            if (plugin.processLast) {
+                initialProcessLastPlugins.add(pluginName);
+            }
+        }
+
+        // Step 2: Find normal plugins that depend on processLast plugins
+        // These must be moved to processLast phase
+        const finalProcessLastPlugins = new Set(initialProcessLastPlugins);
+        let changed = true;
+
+        while (changed) {
+            changed = false;
+            for (const [pluginName, plugin] of allPlugins.entries()) {
+                if (!finalProcessLastPlugins.has(pluginName)) {
+                    // Check if this normal plugin depends on any processLast plugin
+                    for (const dependency of plugin.dependencies) {
+                        if (finalProcessLastPlugins.has(dependency)) {
+                            console.log(`PluginManager: Moving ${pluginName} to processLast phase (depends on ${dependency})`);
+                            finalProcessLastPlugins.add(pluginName);
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 3: Separate into final phases
+        const normalPlugins = new Set<string>();
+        for (const pluginName of allPlugins.keys()) {
+            if (!finalProcessLastPlugins.has(pluginName)) {
+                normalPlugins.add(pluginName);
+            }
+        }
+
+        console.log('PluginManager: Normal plugins:', Array.from(normalPlugins));
+        console.log('PluginManager: ProcessLast plugins:', Array.from(finalProcessLastPlugins));
+
+        // Step 4: Resolve dependencies in each phase
+        const normalOrder = this.resolveDependencies(normalPlugins, allPlugins, 'normal');
+        const processLastOrder = this.resolveDependencies(finalProcessLastPlugins, allPlugins, 'processLast');
+
+        // Step 5: Combine the orders
+        const finalOrder = [...normalOrder, ...processLastOrder];
+        
+        console.log('PluginManager: Final dependency order:', finalOrder);
+        this.initializationOrder = finalOrder;
+    }
+
+    private resolveDependencies(pluginSet: Set<string>, allPlugins: Map<string, BasePlugin>, phase: string): string[] {
         const visited = new Set<string>();
         const visiting = new Set<string>();
         const order: string[] = [];
 
-        console.log('PluginManager: Starting dependency resolution');
-        console.log('PluginManager: Available plugins:', Array.from(this.plugins.keys()));
+        console.log(`PluginManager: Resolving ${phase} plugins:`, Array.from(pluginSet));
 
         const visit = (pluginName: string) => {
-            console.log(`PluginManager: Visiting plugin ${pluginName}`);
+            console.log(`PluginManager: Visiting ${phase} plugin ${pluginName}`);
             
             if (visiting.has(pluginName)) {
                 throw new Error(`Circular dependency detected involving plugin: ${pluginName}`);
@@ -83,7 +141,7 @@ export class PluginManager implements IPluginManager {
                 return;
             }
 
-            const plugin = this.plugins.get(pluginName);
+            const plugin = allPlugins.get(pluginName);
             if (!plugin) {
                 throw new Error(`Plugin ${pluginName} is required as a dependency but not found`);
             }
@@ -91,27 +149,31 @@ export class PluginManager implements IPluginManager {
             console.log(`PluginManager: Plugin ${pluginName} has dependencies:`, plugin.dependencies);
             visiting.add(pluginName);
 
-            // Visit all dependencies first
+            // Visit all dependencies first (they should all be in current set now after phase adjustment)
             for (const dependency of plugin.dependencies) {
-                visit(dependency);
+                if (pluginSet.has(dependency)) {
+                    visit(dependency);
+                } else {
+                    // This should not happen after proper phase adjustment
+                    throw new Error(`Plugin ${pluginName} depends on ${dependency} which is not in the same phase`);
+                }
             }
 
             visiting.delete(pluginName);
             visited.add(pluginName);
             order.push(pluginName);
-            console.log(`PluginManager: Added ${pluginName} to order, current order:`, [...order]);
+            console.log(`PluginManager: Added ${pluginName} to ${phase} order, current order:`, [...order]);
         };
 
-        // Visit all plugins to build dependency order
-        for (const pluginName of this.plugins.keys()) {
-            console.log(`PluginManager: Checking if ${pluginName} needs visiting, visited:`, visited.has(pluginName));
+        // Visit all plugins in the current set
+        for (const pluginName of pluginSet) {
             if (!visited.has(pluginName)) {
                 visit(pluginName);
             }
         }
 
-        console.log('PluginManager: Final dependency order:', order);
-        this.initializationOrder = order;
+        console.log(`PluginManager: ${phase} phase order:`, order);
+        return order;
     }
 
     destroy(): void {

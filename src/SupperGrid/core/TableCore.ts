@@ -3,6 +3,7 @@ import type {
   RowCommand, 
   CellId, 
   RowId, 
+  SpaceId,
   CellCommandHandeler,
   RowCommandMap,
 } from './types';
@@ -10,8 +11,9 @@ import type { TablePluginAPIs, RowPluginAPIs, RowTableAPIs } from './BasePlugin'
 import { CellCommandRegistry, RowCommandRegistry } from './CommandRegistry';
 import { PluginManager } from './PluginManager';
 import type { BasePlugin } from './BasePlugin';
-import { CellRegistry, RowRegistry } from './Registries';
+import { CellRegistry, RowRegistry, SpaceRegistry } from './Registries';
 import { CellCoordinator } from './CellCordinator';
+import { SpaceCoordinator } from './SpaceCoordinator';
 
 export class TableCore {
   private cellCommandRegistry: CellCommandRegistry;
@@ -19,8 +21,9 @@ export class TableCore {
   private pluginManager: PluginManager;
   private cellRegistry: CellRegistry;
   private rowRegistry: RowRegistry<any>;
-  // private spaceRegistry: SpaceRegistry; // TODO: Implement space management
+  private spaceRegistry: SpaceRegistry;
   private cellCoordinator: CellCoordinator;
+  private spaceCoordinator: SpaceCoordinator;
 
   constructor() {
     this.cellCommandRegistry = new CellCommandRegistry();
@@ -28,8 +31,9 @@ export class TableCore {
     this.pluginManager = new PluginManager();
     this.cellRegistry = CellRegistry.getInstance();
     this.rowRegistry = RowRegistry.getInstance();
-    // this.spaceRegistry = SpaceRegistry.getInstance(); // TODO: Implement space management
+    this.spaceRegistry = SpaceRegistry.getInstance();
     this.cellCoordinator = CellCoordinator.getInstance(this.cellRegistry);
+    this.spaceCoordinator = SpaceCoordinator.getInstance(this.spaceRegistry);
   }
 
   // Factory for plugin-specific APIs with bound context
@@ -125,6 +129,23 @@ export class TableCore {
       getRowIds: (): RowId[] => {
         // Get all row IDs from registry
         return this.rowRegistry.list();
+      },
+
+      getSpaceAbove: (spaceId: SpaceId) => {
+        return this.spaceCoordinator.getSpaceAbove(spaceId);
+      },
+
+      getSpaceBelow: (spaceId: SpaceId) => {
+        return this.spaceCoordinator.getSpaceBelow(spaceId);
+      },
+
+      getSpace: (spaceId: SpaceId) => {
+        return this.spaceRegistry.get(spaceId);
+      },
+
+      getMySpace: () => {
+        // Return this plugin's space ID
+        return `space-${pluginName}`;
       }
     };
   }
@@ -204,9 +225,13 @@ export class TableCore {
     const orderedPlugins = this.pluginManager.getPluginsInOrder();
     console.log('TableCore: Found plugins in order:', orderedPlugins.map(p => p.name));
     
-    // SECOND: Set APIs for all plugins before connecting to registries
+    // SECOND: Create spaces for all plugins and set APIs
     for (const plugin of orderedPlugins) {
-      console.log(`TableCore: Setting APIs for plugin ${plugin.name}`);
+      console.log(`TableCore: Creating space and setting APIs for plugin ${plugin.name}`);
+      
+      // Create a space for this plugin
+      const spaceId = this.spaceCoordinator.createPluginSpace(plugin.name);
+      console.log(`TableCore: Created space ${spaceId} for plugin ${plugin.name}`);
       
       // Create context-aware APIs for this specific plugin
       const tableAPI = this.createPluginAPI(plugin.name);
@@ -217,7 +242,7 @@ export class TableCore {
       
       // Give the plugin its bound APIs
       plugin.setAPIs(tableAPI, rowAPI, rowTableAPI);
-      console.log(`TableCore: APIs set for plugin ${plugin.name}`);
+      console.log(`TableCore: APIs set for plugin ${plugin.name} with space ${spaceId}`);
     }
 
     // THIRD: Connect plugins to command registries (now APIs are ready)
@@ -408,6 +433,14 @@ export class TableCore {
 
   getCellCoordinator(): CellCoordinator {
     return this.cellCoordinator;
+  }
+
+  getSpaceCoordinator(): SpaceCoordinator {
+    return this.spaceCoordinator;
+  }
+
+  getSpaceRegistry(): SpaceRegistry {
+    return this.spaceRegistry;
   }
 
   getPluginManager(): PluginManager {
