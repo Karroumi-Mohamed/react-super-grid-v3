@@ -1,4 +1,4 @@
-import type { CellCommand, RowCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
+import type { CellCommand, RowCommand, SpaceCommand, CellId, RowId, SpaceId, Cell, Space, SpaceCommandMap } from './types';
 
 // Spatial comparison result types
 export type VerticalComparison = {
@@ -65,6 +65,9 @@ export abstract class BasePlugin {
     abstract onBeforeCellCommand(command: CellCommand): boolean | void;
     abstract onBeforeRowCommand<K extends keyof import('./types').RowCommandMap>(
         command: RowCommand<K>
+    ): boolean | void;
+    abstract onBeforeSpaceCommand<K extends keyof SpaceCommandMap>(
+        command: SpaceCommand<K>
     ): boolean | void;
 
     // Dependency management

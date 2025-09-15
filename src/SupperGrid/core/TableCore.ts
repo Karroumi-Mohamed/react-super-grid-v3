@@ -1,23 +1,27 @@
-import type { 
-  CellCommand, 
-  RowCommand, 
-  CellId, 
-  RowId, 
+import type {
+  CellCommand,
+  RowCommand,
+  SpaceCommand,
+  CellId,
+  RowId,
   SpaceId,
   CellCommandHandeler,
   RowCommandMap,
+  SpaceCommandMap,
 } from './types';
 import type { TablePluginAPIs, RowPluginAPIs, RowTableAPIs } from './BasePlugin';
-import { CellCommandRegistry, RowCommandRegistry } from './CommandRegistry';
+import { CellCommandRegistry, RowCommandRegistry, SpaceCommandRegistry } from './CommandRegistry';
 import { PluginManager } from './PluginManager';
 import type { BasePlugin } from './BasePlugin';
 import { CellRegistry, RowRegistry, SpaceRegistry } from './Registries';
 import { CellCoordinator } from './CellCordinator';
 import { SpaceCoordinator } from './SpaceCoordinator';
+import { v4 as uuidv4 } from 'uuid';
 
 export class TableCore {
   private cellCommandRegistry: CellCommandRegistry;
   private rowCommandRegistry: RowCommandRegistry;
+  private spaceCommandRegistry: SpaceCommandRegistry;
   private pluginManager: PluginManager;
   private cellRegistry: CellRegistry;
   private rowRegistry: RowRegistry<any>;
@@ -28,6 +32,7 @@ export class TableCore {
   constructor() {
     this.cellCommandRegistry = new CellCommandRegistry();
     this.rowCommandRegistry = new RowCommandRegistry();
+    this.spaceCommandRegistry = new SpaceCommandRegistry();
     this.pluginManager = new PluginManager();
     this.cellRegistry = CellRegistry.getInstance();
     this.rowRegistry = RowRegistry.getInstance();
@@ -51,7 +56,7 @@ export class TableCore {
       },
 
       createRowCommand: <K extends keyof RowCommandMap>(
-        targetId: RowId, 
+        targetId: RowId,
         command: RowCommand<K>
       ) => {
         const contextCommand: RowCommand<K> = {
@@ -61,6 +66,19 @@ export class TableCore {
           timestamp: command.timestamp || Date.now()
         };
         this.rowCommandRegistry.dispatch(contextCommand);
+      },
+
+      createSpaceCommand: <K extends keyof SpaceCommandMap>(
+        targetSpaceId: SpaceId,
+        command: Omit<SpaceCommand<K>, 'targetSpaceId' | 'originPlugin' | 'timestamp'>
+      ) => {
+        const contextCommand: SpaceCommand<K> = {
+          ...command,
+          targetSpaceId,
+          originPlugin: pluginName,
+          timestamp: command.timestamp || Date.now()
+        };
+        this.spaceCommandRegistry.dispatch(contextCommand);
       },
 
       getCell: (cellId: CellId) => {
@@ -79,7 +97,7 @@ export class TableCore {
           const parts = cellId.split('-');
           return {
             col: parseInt(parts[0]),
-            row: parseInt(parts[1])
+            row: parts[1] // Keep as string for fractional indices
           };
         };
 
@@ -89,8 +107,9 @@ export class TableCore {
         // Same row - no vertical relationship
         if (coords1.row === coords2.row) return null;
 
-        // Return with top cell first, bottom cell second
-        if (coords1.row < coords2.row) {
+        // Bottom-up indexing with fractional indices: higher string value = higher position (top)
+        // String comparison works correctly with padded fractional indices
+        if (coords1.row > coords2.row) {
           return { top: cellId1, bottom: cellId2 };
         } else {
           return { top: cellId2, bottom: cellId1 };
@@ -246,10 +265,11 @@ export class TableCore {
     }
 
     // THIRD: Connect plugins to command registries (now APIs are ready)
-    const plugins = this.pluginManager.getPlugins();
-    console.log('TableCore: Connecting plugins to registries:', plugins.map(p => p.name));
-    this.cellCommandRegistry.setPlugins(plugins);
-    this.rowCommandRegistry.setPlugins(plugins);
+    // Use the same ordered plugins for consistent processing order
+    console.log('TableCore: Connecting plugins to registries:', orderedPlugins.map(p => p.name));
+    this.cellCommandRegistry.setPlugins(orderedPlugins);
+    this.rowCommandRegistry.setPlugins(orderedPlugins);
+    this.spaceCommandRegistry.setPlugins(orderedPlugins);
 
     // FINALLY: Initialize plugins after all APIs are set and registries connected
     console.log('TableCore: Calling plugin manager initializePlugins');
@@ -269,6 +289,10 @@ export class TableCore {
 
   dispatchRowCommand<K extends keyof RowCommandMap>(command: RowCommand<K>): void {
     this.rowCommandRegistry.dispatch(command);
+  }
+
+  dispatchSpaceCommand<K extends keyof SpaceCommandMap>(command: SpaceCommand<K>): void {
+    this.spaceCommandRegistry.dispatch(command);
   }
 
   // Dispatch keyboard commands without targetId (plugin-only)
@@ -301,7 +325,7 @@ export class TableCore {
     this.cellCommandRegistry.dispatch(keyboardCommand);
   }
 
-  private convertMouseEventToCommand(cellId: CellId, eventName: string, event: MouseEvent): void {
+  convertMouseEventToCommand(cellId: CellId, eventName: string, event: MouseEvent): void {
     let command: CellCommand;
 
     switch (eventName) {
@@ -427,12 +451,74 @@ export class TableCore {
     return this.rowCommandRegistry;
   }
 
+  getSpaceCommandRegistry(): SpaceCommandRegistry {
+    return this.spaceCommandRegistry;
+  }
+
   getRowRegistry(): RowRegistry<any> {
     return this.rowRegistry;
   }
 
   getCellCoordinator(): CellCoordinator {
     return this.cellCoordinator;
+  }
+
+  getCellRegistry(): CellRegistry {
+    return this.cellRegistry;
+  }
+
+  // Fractional row indexing system
+  generateFractionalIndex(belowIndex?: string, aboveIndex?: string): string {
+    const PADDING_LENGTH = 5;
+    const BASE_INCREMENT = 10000;
+
+    if (!belowIndex && !aboveIndex) {
+      // First row in empty space
+      return "50000";
+    }
+
+    if (!belowIndex) {
+      // Insert below the bottom-most row
+      const above = parseInt(aboveIndex!);
+      const newIndex = Math.max(above - BASE_INCREMENT, 1000);
+      return newIndex.toString().padStart(PADDING_LENGTH, '0');
+    }
+
+    if (!aboveIndex) {
+      // Insert above the top-most row
+      const below = parseInt(belowIndex!);
+      const newIndex = below + BASE_INCREMENT;
+      return newIndex.toString().padStart(PADDING_LENGTH, '0');
+    }
+
+    // Insert between two existing rows
+    const below = parseInt(belowIndex);
+    const above = parseInt(aboveIndex);
+
+    if (above - below <= 1) {
+      // No space left, need to use larger numbers or decimals
+      // For now, just add to the above index
+      console.warn('Fractional index space exhausted, using incremental approach');
+      return (above + 1000).toString().padStart(PADDING_LENGTH, '0');
+    }
+
+    const middle = Math.floor((below + above) / 2);
+    return middle.toString().padStart(PADDING_LENGTH, '0');
+  }
+
+  // Generate initial fractional indices for table space rows
+  generateInitialFractionalIndices(count: number): string[] {
+    const indices: string[] = [];
+    const BASE_INCREMENT = 10000;
+
+    for (let i = 0; i < count; i++) {
+      // Bottom-up: first item (i=0) gets highest visual position
+      const visualPosition = count - 1 - i; // Reverse for bottom-up
+      const baseIndex = (visualPosition + 1) * BASE_INCREMENT;
+      indices.push(baseIndex.toString().padStart(5, '0'));
+    }
+
+    return indices;
   }
 
   getSpaceCoordinator(): SpaceCoordinator {
@@ -445,6 +531,140 @@ export class TableCore {
 
   getPluginManager(): PluginManager {
     return this.pluginManager;
+  }
+
+  // Create a new row in a specific space
+  createRowInSpace<TData>(
+    spaceId: SpaceId,
+    rowData: TData,
+    position: 'top' | 'bottom' | { after: RowId } = 'bottom'
+  ): RowId {
+    console.log(`TableCore: Creating row in space ${spaceId} at position:`, position);
+
+    // 1. Generate new row ID and calculate fractional index
+    const newRowId = uuidv4();
+    const newFractionalIndex = this.calculateFractionalIndexForSpace(spaceId, position);
+
+    console.log(`TableCore: Generated rowId ${newRowId} with fractional index ${newFractionalIndex}`);
+
+    // 2. Create new row object
+    const newRow: import('./types').Row<TData> = {
+      spaceId,
+      data: rowData,
+      cells: [], // Will be populated when GridRow renders
+      top: null,
+      bottom: null,
+      fractionalIndex: newFractionalIndex
+    };
+
+    // 3. Update spatial links with neighbors
+    this.updateSpatialLinks(newRowId, newRow);
+
+    // 4. Register the new row (this will trigger Space component re-render)
+    this.rowRegistry.register(newRowId, newRow);
+
+    console.log(`TableCore: Successfully created row ${newRowId} in space ${spaceId}`);
+    return newRowId;
+  }
+
+  // Helper methods for spatial neighbor finding
+  private getAllRowsSortedByIndex(): import('./types').Row<any>[] {
+    return this.rowRegistry.list()
+      .map(rowId => this.rowRegistry.get(rowId)!)
+      .filter(row => row !== undefined)
+      .sort((a, b) => b.fractionalIndex.localeCompare(a.fractionalIndex)); // Descending (top to bottom)
+  }
+
+  private findVisualNeighbors(spaceId: SpaceId, newFractionalIndex: string): { aboveRow: import('./types').Row<any> | null, belowRow: import('./types').Row<any> | null } {
+    const allRows = this.getAllRowsSortedByIndex();
+
+    let aboveRow: import('./types').Row<any> | null = null;
+    let belowRow: import('./types').Row<any> | null = null;
+
+    for (let i = 0; i < allRows.length; i++) {
+      const row = allRows[i];
+
+      if (row.fractionalIndex > newFractionalIndex) {
+        // This row is above our new row
+        aboveRow = row;
+        belowRow = i > 0 ? allRows[i - 1] : null;
+        break;
+      }
+    }
+
+    // If we didn't find any row above, new row goes at the very top
+    if (!aboveRow && allRows.length > 0) {
+      belowRow = allRows[allRows.length - 1]; // Last row becomes below
+    }
+
+    return { aboveRow, belowRow };
+  }
+
+  private calculateFractionalIndexForSpace(spaceId: SpaceId, position: 'top' | 'bottom' | { after: RowId }): string {
+    const rowsInSpace = this.rowRegistry.list()
+      .map(rowId => this.rowRegistry.get(rowId)!)
+      .filter(row => row && row.spaceId === spaceId)
+      .sort((a, b) => b.fractionalIndex.localeCompare(a.fractionalIndex)); // Top to bottom
+
+    if (rowsInSpace.length === 0) {
+      // Empty space - generate initial index
+      return this.generateFractionalIndex();
+    }
+
+    if (position === 'top') {
+      // Insert above the highest row in this space
+      const highestRow = rowsInSpace[0];
+      return this.generateFractionalIndex(highestRow.fractionalIndex, undefined);
+    } else if (position === 'bottom') {
+      // Insert below the lowest row in this space
+      const lowestRow = rowsInSpace[rowsInSpace.length - 1];
+      return this.generateFractionalIndex(undefined, lowestRow.fractionalIndex);
+    } else {
+      // Insert after specific row
+      const targetRowId = position.after;
+      const targetRow = this.rowRegistry.get(targetRowId);
+
+      if (!targetRow) {
+        console.warn(`TableCore: Target row ${targetRowId} not found for insertion`);
+        return this.generateFractionalIndex();
+      }
+
+      // Find the row below the target row (if any)
+      const allRows = this.getAllRowsSortedByIndex();
+      const targetIndex = allRows.findIndex(row => row === targetRow);
+      const belowRow = targetIndex < allRows.length - 1 ? allRows[targetIndex + 1] : null;
+
+      return this.generateFractionalIndex(targetRow.fractionalIndex, belowRow?.fractionalIndex);
+    }
+  }
+
+  private updateSpatialLinks(newRowId: RowId, newRow: import('./types').Row<any>): void {
+    const { aboveRow, belowRow } = this.findVisualNeighbors(newRow.spaceId, newRow.fractionalIndex);
+
+    // Update new row's links
+    newRow.top = aboveRow?.top || null;  // Get the ID from the row object
+    newRow.bottom = belowRow?.bottom || null;  // Get the ID from the row object
+
+    // Update neighbor links
+    if (aboveRow) {
+      // Find the actual row ID for aboveRow
+      const aboveRowId = this.rowRegistry.list().find(id => this.rowRegistry.get(id) === aboveRow);
+      if (aboveRowId) {
+        aboveRow.bottom = newRowId;
+        this.rowRegistry.register(aboveRowId, aboveRow);
+        newRow.top = aboveRowId;
+      }
+    }
+
+    if (belowRow) {
+      // Find the actual row ID for belowRow
+      const belowRowId = this.rowRegistry.list().find(id => this.rowRegistry.get(id) === belowRow);
+      if (belowRowId) {
+        belowRow.top = newRowId;
+        this.rowRegistry.register(belowRowId, belowRow);
+        newRow.bottom = belowRowId;
+      }
+    }
   }
 
   // Row destruction with automatic cell cleanup

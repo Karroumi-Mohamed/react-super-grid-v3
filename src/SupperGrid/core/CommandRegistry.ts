@@ -1,6 +1,8 @@
 import type { CellCommand, RowCommand, CellId, RowId, CellCommandHandeler, RowCommandMap } from './types';
 import type { BasePlugin } from './BasePlugin';
 
+export { SpaceCommandRegistry } from './SpaceCommandRegistry';
+
 export class CellCommandRegistry {
     private handlers = new Map<CellId, CellCommandHandeler>();
     private plugins: BasePlugin[] = [];

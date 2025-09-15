@@ -9,22 +9,22 @@ export class FocusPlugin extends BasePlugin {
 
     onInit(): void {
         console.log('FocusPlugin: Initialized');
-        
+
         // Log space information
         if (this.tableAPIs) {
             const mySpace = this.tableAPIs.getMySpace();
             console.log(`FocusPlugin: My space is ${mySpace}`);
-            
+
             const spaceAbove = this.tableAPIs.getSpaceAbove(mySpace);
             const spaceBelow = this.tableAPIs.getSpaceBelow(mySpace);
-            
+
             console.log(`FocusPlugin: Space above: ${spaceAbove || 'none'}`);
             console.log(`FocusPlugin: Space below: ${spaceBelow || 'none'}`);
-            
+
             const spaceData = this.tableAPIs.getSpace(mySpace);
             console.log(`FocusPlugin: Space data:`, spaceData);
         }
-        
+
         // Example: Delete first row after 5 seconds
         setTimeout(() => {
             console.log('FocusPlugin: Attempting to delete first row after 5s...');
@@ -85,6 +85,8 @@ export class FocusPlugin extends BasePlugin {
         switch (direction) {
             case 'ArrowUp':
                 const top = this.tableAPIs?.getCell(this.focusedCell)?.top
+                console.log(top);
+
                 if (top) {
                    this.focusCell(top)
                 }

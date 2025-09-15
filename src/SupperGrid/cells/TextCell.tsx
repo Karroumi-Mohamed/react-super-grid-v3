@@ -15,7 +15,7 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
     registerCommands
 }) => {
     // Initialize state only once, ignore future prop changes
-    const [internalValue, setInternalValue] = useState(() => value || '');
+    const [internalValue, setInternalValue] = useState(() => value ?? '');
     const [isFocused, setIsFocused] = useState(false);
     const [isSelected, setIsSelected] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -54,7 +54,7 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
 
                 case 'updateValue':
                     if (command.payload?.value !== undefined) {
-                        setInternalValue(String(command.payload.value));
+                        setInternalValue(command.payload.value ?? '');
                     }
                     break;
 
@@ -123,7 +123,7 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
                 />
             ) : (
                 <span className="text-cell-display">
-                    {internalValue || config.placeholder}
+                    {internalValue || config.placeholder || ''}
                 </span>
             )}
             {error && (

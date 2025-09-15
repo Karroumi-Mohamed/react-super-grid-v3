@@ -15,6 +15,7 @@ type Row<T> = {
     cells: CellId[];
     top: RowId | null;
     bottom: RowId | null;
+    fractionalIndex: string;
 };
 
 type Cell = {
@@ -107,11 +108,25 @@ type RowCommand<K extends keyof RowCommandMap = keyof RowCommandMap> = {
   timestamp?: number;
 };
 
-export type { CellCommand, RowCommand, RowCommandMap };
+type SpaceCommandMap = {
+  createRow: { data: any; position?: 'top' | 'bottom' | { after: RowId } };
+  deleteSpace: {};
+};
+
+type SpaceCommand<K extends keyof SpaceCommandMap = keyof SpaceCommandMap> = {
+  name: K;
+  payload: SpaceCommandMap[K];
+  targetSpaceId: SpaceId;
+  originPlugin?: string;
+  timestamp?: number;
+};
+
+export type { CellCommand, RowCommand, RowCommandMap, SpaceCommand, SpaceCommandMap };
 
 
 type CellCommandHandeler = (command: CellCommand) => void;
 type RowCommandHandler = (command: RowCommand<any>) => void;
+type SpaceCommandHandler = (command: SpaceCommand<any>) => void;
 
 interface TableRowAPI {
     registerCellCommands: (cellId: CellId, handler: CellCommandHandeler) => void;
@@ -123,7 +138,7 @@ interface TableRowAPI {
     unregisterRowHandler: () => void;
 }
 
-export type { CellCommandHandeler, RowCommandHandler, TableRowAPI };
+export type { CellCommandHandeler, RowCommandHandler, SpaceCommandHandler, TableRowAPI };
 
 /// components
 interface BaseCellConfig {
@@ -141,13 +156,13 @@ interface BaseCellConfig {
 
 type CellProps<T, C extends BaseCellConfig> = {
     id: CellId;
-    value: T;
+    value: T | null;
     config: C;
     registerCommands: (handler: CellCommandHandeler) => void;
     // registerCommands, registerActions, executeAction for later
 };
 
-type CellComponent<T, C extends BaseCellConfig> = React.FC<CellProps<T, C>>;
+type CellComponent<T, C extends BaseCellConfig> = React.FC<CellProps<T | null, C>>;
 
 type ExtractCellConfig<T> = T extends CellComponent<any, infer C> ? C : never;
 export type { BaseCellConfig, CellProps, CellComponent, ExtractCellConfig };
@@ -156,7 +171,6 @@ type RowProps<T> = {
     id: RowId;
     data: T;
     columns: TableConfig<T>;
-    tableApis: TableRowAPI;
     rowIndex: number;
     isLastRow?: boolean;
 };
@@ -166,7 +180,7 @@ export type { RowProps };
 type TableConfig<TData> = Array<
     {
         key: keyof TData;
-        cell: CellComponent<any, any>;
+        cell: CellComponent<TData[keyof TData], any>;
     } & Record<string, any>
 >;
 

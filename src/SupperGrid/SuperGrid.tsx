@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler, RowCommandHandler } from './core/types';
+import type { TableProps, RowProps, RowId, CellId, SpaceId, CellCommand, Cell, CellCommandHandeler, RowCommandHandler, SpaceCommandHandler } from './core/types';
 import { TableCore } from './core/TableCore';
 import type { BasePlugin } from './core/BasePlugin';
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from './core/utils';
+import { TableContext, type TableContextValue, useTableContext } from './core/TableContext';
+import { Space } from './components/Space';
 
 interface SuperGridProps<TData> extends TableProps<TData> {
     plugins?: BasePlugin[];
@@ -90,126 +92,123 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         };
     }, [plugins]);
 
-    // Store row IDs to maintain stable UUIDs and proper linking
-    const rowIdsRef = useRef<RowId[]>([]);
+    // Cell linking is now handled by individual Space components
 
-    // Link cells vertically across rows after all rows are rendered
-    useEffect(() => {
-        if (tableCoreReady && tableCoreRef.current && rowIdsRef.current.length > 1) {
-            console.log('SuperGrid: Linking cells vertically across rows');
-
-            const rowRegistry = tableCoreRef.current.getRowRegistry();
-            const coordinator = tableCoreRef.current.getCellCoordinator();
-
-            // Use visual order from rowIdsRef (which matches data array order)
-            for (let i = 0; i < rowIdsRef.current.length - 1; i++) {
-                const currentRowId = rowIdsRef.current[i];     // Visual position i
-                const nextRowId = rowIdsRef.current[i + 1];    // Visual position i+1
-
-                const currentRow = rowRegistry.get(currentRowId);
-                const nextRow = rowRegistry.get(nextRowId);
-
-                console.log(`SuperGrid: Linking row ${i} (${currentRowId.slice(0, 8)}...) to row ${i + 1} (${nextRowId.slice(0, 8)}...)`);
-
-                if (currentRow && nextRow &&
-                    currentRow.cells.length === nextRow.cells.length) {
-                    // Link corresponding cells between visually adjacent rows
-                    coordinator.linkRowsCells(currentRow.cells, nextRow.cells);
-                    console.log(`SuperGrid: Linked ${currentRow.cells.length} cells between rows`);
-                } else {
-                    console.warn(`SuperGrid: Cannot link rows ${i} and ${i + 1} - missing data or cell count mismatch`);
+    // Create table context value
+    const tableContextValue: TableContextValue = {
+        sendMouseEvent: (cellId: CellId, eventName: string, event: MouseEvent) => {
+            tableCoreRef.current?.convertMouseEventToCommand(cellId, eventName, event);
+        },
+        sendKeyboardEvent: (cellId: CellId, eventName: string, event: KeyboardEvent) => {
+            // TODO: Implement keyboard event handling
+            console.log('Keyboard event not yet implemented:', cellId, eventName, event);
+        },
+        registerCellCommands: (cellId: CellId, handler: CellCommandHandeler) => {
+            tableCoreRef.current?.getCellCommandRegistry().register(cellId, handler);
+        },
+        registerCell: (cellId: CellId, cell: Cell) => {
+            tableCoreRef.current?.getCellRegistry().register(cellId, cell);
+        },
+        addCellToRow: (rowId: RowId, cellId: CellId) => {
+            const row = tableCoreRef.current?.getRowRegistry().get(rowId);
+            if (row) {
+                if (!row.cells.includes(cellId)) {
+                    row.cells.push(cellId);
+                    tableCoreRef.current?.getRowRegistry().register(rowId, row);
                 }
             }
-            console.log('SuperGrid: Vertical cell linking completed');
+        },
+        registerRowHandler: (rowId: RowId, handler: RowCommandHandler) => {
+            tableCoreRef.current?.getRowCommandRegistry().register(rowId, handler);
+        },
+        unregisterRowHandler: (rowId: RowId) => {
+            tableCoreRef.current?.getRowCommandRegistry().unregister(rowId);
+        },
+        registerSpaceHandler: (spaceId: SpaceId, handler: SpaceCommandHandler) => {
+            tableCoreRef.current?.getSpaceCommandRegistry().register(spaceId, handler);
+        },
+        unregisterSpaceHandler: (spaceId: SpaceId) => {
+            tableCoreRef.current?.getSpaceCommandRegistry().unregister(spaceId);
+        },
+        getCellCoordinator: () => {
+            return tableCoreRef.current!.getCellCoordinator();
         }
-    }, [data, tableCoreReady]); // Re-run when data changes or table becomes ready
-
-    // Create row components with context-aware APIs
-    const renderRows = () => {
-        // Ensure we have stable UUIDs for each row
-        if (rowIdsRef.current.length !== data.length) {
-            // Generate UUIDs for new rows or adjust for removed rows
-            const newRowIds: RowId[] = [];
-            for (let i = 0; i < data.length; i++) {
-                if (i < rowIdsRef.current.length) {
-                    newRowIds[i] = rowIdsRef.current[i]; // Keep existing UUID
-                } else {
-                    newRowIds[i] = uuidv4(); // Generate new UUID
-                }
-            }
-            rowIdsRef.current = newRowIds;
-        }
-
-        return data.map((rowData, index) => {
-            const rowId: RowId = rowIdsRef.current[index];
-            const isLastRow = index === data.length - 1;
-
-            // Create context-aware API for this specific row
-            if (!tableCoreRef.current || !tableCoreReady) {
-                console.log('not created yet');
-                return null
-            }
-
-            console.log('created');
-
-            // Create and register the Row object in the row registry
-            const rowObject: import('./core/types').Row<TData> = {
-                spaceId: 'default-space', // For now use default space
-                data: rowData,
-                cells: [], // Will be populated by the row component
-                top: index > 0 ? rowIdsRef.current[index - 1] : null,
-                bottom: index < data.length - 1 ? rowIdsRef.current[index + 1] : null
-            };
-
-            // Register the row object
-            const tableCore = tableCoreRef.current;
-            tableCore.getRowRegistry().register(rowId, rowObject);
-
-            const tableApis = tableCoreRef.current.createRowAPI(rowId);
-
-            // Create row props with the bound API
-            const rowProps: RowProps<TData> = {
-                id: rowId,
-                data: rowData,
-                columns: config,
-                tableApis, // This is the context-aware API bound to this row's ID
-                rowIndex: index, // Pass the row index for spatial coordinates
-                isLastRow // Pass whether this is the last row
-            };
-
-            return <GridRow key={rowId} {...rowProps} />;
-        });
     };
 
+    // Render spaces in dependency order + table space at bottom
+    const renderSpaces = () => {
+        if (!tableCoreReady || !tableCoreRef.current) {
+            return null;
+        }
+
+        const spaces = [];
+
+        // Get plugins in dependency order (same order as initialization)
+        const orderedPlugins = tableCoreRef.current.getPluginManager().getPluginsInOrder();
+
+        // Render plugin spaces in dependency order
+        orderedPlugins.forEach(plugin => {
+            const spaceId = `space-${plugin.name}`;
+            spaces.push(
+                <Space
+                    key={spaceId}
+                    id={spaceId}
+                    data={[]} // Plugin spaces start empty, plugins will populate them
+                    tableCore={tableCoreRef.current!}
+                    config={config}
+                    GridRow={GridRow}
+                />
+            );
+        });
+
+        // Add table space at the very bottom (for main data)
+        spaces.push(
+            <Space
+                key="table-space"
+                id="table-space"
+                data={data} // Main table data
+                tableCore={tableCoreRef.current!}
+                config={config}
+                GridRow={GridRow}
+            />
+        );
+
+        return spaces;
+    };
+
+
     return (
-        <div className="w-fit">
-            {/* Header row */}
-            <div className="flex">
-                {config.map((col, index) => (
-                    <div
-                        key={index}
-                        className={cn(
-                            'border-neutral-200 border-[0.5px] h-10 inset-0 box-border',
-                            'ring-[0.5px] ring-inset ring-transparent'
-                        )}
-                        style={{ width: `calc(${col.width} + 1px)` }}
-                    >
-                        <div className="h-full w-full flex justify-start items-center p-2 bg-stone-50 hover:bg-stone-100 hover:ring-stone-800 ring-transparent ring-[0.5px]">
-                            {col.header}
+        <TableContext.Provider value={tableContextValue}>
+            <div className="w-fit">
+                {/* Header row */}
+                <div className="flex">
+                    {config.map((col, index) => (
+                        <div
+                            key={index}
+                            className={cn(
+                                'border-neutral-200 border-[0.5px] h-10 inset-0 box-border',
+                                'ring-[0.5px] ring-inset ring-transparent'
+                            )}
+                            style={{ width: `calc(${col.width} + 1px)` }}
+                        >
+                            <div className="h-full w-full flex justify-start items-center p-2 bg-stone-50 hover:bg-stone-100 hover:ring-stone-800 ring-transparent ring-[0.5px]">
+                                {col.header}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
+                </div>
+                {/* Spaces (plugin spaces + table space) */}
+                <div className="w-full">
+                    {renderSpaces()}
+                </div>
             </div>
-            {/* Data rows */}
-            <div className="w-full">
-                {renderRows()}
-            </div>
-        </div>
+        </TableContext.Provider>
     );
 });
 
-// Row component that uses the context-aware TableRowAPI
-function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TData>) {
+// Row component that uses the TableContext
+function GridRow<TData>({ id, data, columns, rowIndex }: RowProps<TData>) {
+    const tableContext = useTableContext();
     const [isDestroyed, setIsDestroyed] = useState(false);
     const renderCountRef = useRef(0);
     
@@ -242,19 +241,19 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
                     break;
             }
         };
-        
-        tableApis.registerRowHandler(handleRowCommand);
-        
+
+        tableContext.registerRowHandler(id, handleRowCommand);
+
         return () => {
-            tableApis.unregisterRowHandler();
+            tableContext.unregisterRowHandler(id);
         };
-    }, [id, tableApis]);
+    }, [id, tableContext]);
 
     // Row creates cell-specific registerCommands functions
     const createCellRegisterFunction = (cellId: string) => {
         return (handler: CellCommandHandeler) => {
-            // Row uses TableRowAPI to register the cell with the table
-            tableApis.registerCellCommands(cellId, handler);
+            // Row uses TableContext to register the cell with the table
+            tableContext.registerCellCommands(cellId, handler);
         };
     };
 
@@ -282,8 +281,8 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
                 };
 
                 // Register the cell object and add to row
-                tableApis.registerCell(cellId, cellObject);
-                tableApis.addCellToRow(cellId);
+                tableContext.registerCell(cellId, cellObject);
+                tableContext.addCellToRow(id, cellId);
 
                 // Create cell-specific registerCommands function
                 const cellRegisterCommands = createCellRegisterFunction(cellId);
@@ -306,13 +305,13 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
                         )}
                         data-cell-id={cellId}
                         style={{ width: `calc(${column.width} + 1px)` }}
-                        onClick={(e) => tableApis.sendMouseEvent(cellId, 'click', e.nativeEvent)}
-                        onDoubleClick={(e) => tableApis.sendMouseEvent(cellId, 'dblclick', e.nativeEvent)}
-                        onContextMenu={(e) => tableApis.sendMouseEvent(cellId, 'contextmenu', e.nativeEvent)}
-                        onMouseDown={(e) => tableApis.sendMouseEvent(cellId, 'mousedown', e.nativeEvent)}
-                        onMouseUp={(e) => tableApis.sendMouseEvent(cellId, 'mouseup', e.nativeEvent)}
-                        onMouseEnter={(e) => tableApis.sendMouseEvent(cellId, 'mouseenter', e.nativeEvent)}
-                        onMouseLeave={(e) => tableApis.sendMouseEvent(cellId, 'mouseleave', e.nativeEvent)}
+                        onClick={(e) => tableContext.sendMouseEvent(cellId, 'click', e.nativeEvent)}
+                        onDoubleClick={(e) => tableContext.sendMouseEvent(cellId, 'dblclick', e.nativeEvent)}
+                        onContextMenu={(e) => tableContext.sendMouseEvent(cellId, 'contextmenu', e.nativeEvent)}
+                        onMouseDown={(e) => tableContext.sendMouseEvent(cellId, 'mousedown', e.nativeEvent)}
+                        onMouseUp={(e) => tableContext.sendMouseEvent(cellId, 'mouseup', e.nativeEvent)}
+                        onMouseEnter={(e) => tableContext.sendMouseEvent(cellId, 'mouseenter', e.nativeEvent)}
+                        onMouseLeave={(e) => tableContext.sendMouseEvent(cellId, 'mouseleave', e.nativeEvent)}
                     >
                         <div className="h-full w-full">
                             <CellComponent {...cellProps} />
