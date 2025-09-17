@@ -108,11 +108,25 @@ type RowCommand<K extends keyof RowCommandMap = keyof RowCommandMap> = {
   timestamp?: number;
 };
 
-export type { CellCommand, RowCommand, RowCommandMap };
+type SpaceCommandMap = {
+  addRow: { rowData: any; position?: 'top' | 'bottom' };
+  // Note: deleteRow is handled by RowCommand system, not SpaceCommand
+};
+
+type SpaceCommand<K extends keyof SpaceCommandMap = keyof SpaceCommandMap> = {
+  name: K;
+  payload: SpaceCommandMap[K];
+  targetId: SpaceId;
+  originPlugin?: string;
+  timestamp?: number;
+};
+
+export type { CellCommand, RowCommand, RowCommandMap, SpaceCommand, SpaceCommandMap };
 
 
 type CellCommandHandeler = (command: CellCommand) => void;
 type RowCommandHandler = (command: RowCommand<any>) => void;
+type SpaceCommandHandler = (command: SpaceCommand<any>) => void;
 
 interface TableRowAPI {
     registerCellCommands: (cellId: CellId, handler: CellCommandHandeler) => void;
@@ -142,7 +156,7 @@ interface BaseCellConfig {
 
 type CellProps<T, C extends BaseCellConfig> = {
     id: CellId;
-    value: T;
+    value: T | null; // Force cells to handle null values
     config: C;
     registerCommands: (handler: CellCommandHandeler) => void;
     // registerCommands, registerActions, executeAction for later

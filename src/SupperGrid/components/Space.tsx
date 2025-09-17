@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { RowId, SpaceId, TableConfig, RowProps } from '../core/types';
+import type { RowId, SpaceId, TableConfig, RowProps, SpaceCommand, SpaceCommandHandler } from '../core/types';
 import type { TableCore } from '../core/TableCore';
 import { GridRow } from '../SuperGrid';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +14,257 @@ interface SpaceProps<TData> {
 export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceProps<TData>) {
     const [rowIds, setRowIds] = useState<RowId[]>([]);
     const previousRowRef = useRef<RowId | null>(null);
+
+    // Register SpaceCommand handler
+    useEffect(() => {
+        const handleSpaceCommand: SpaceCommandHandler = (command: SpaceCommand) => {
+            console.log(`Space ${spaceId}: Received SpaceCommand:`, command.name);
+
+            switch (command.name) {
+                case 'addRow':
+                    handleAddRow(command.payload.rowData, command.payload.position || 'bottom');
+                    break;
+                default:
+                    console.warn(`Space ${spaceId}: Unhandled SpaceCommand:`, command.name);
+            }
+        };
+
+        // Register handler with SpaceCommandRegistry
+        tableCore.getSpaceCommandRegistry().register(spaceId, handleSpaceCommand);
+
+        return () => {
+            // Unregister handler when component unmounts
+            tableCore.getSpaceCommandRegistry().unregister(spaceId);
+        };
+    }, [spaceId, tableCore]);
+
+    // Handle addRow command with cross-space linking
+    const handleAddRow = (rowData: any, position: 'top' | 'bottom') => {
+        console.log(`Space ${spaceId}: Adding row at ${position}`, rowData);
+
+        const newRowId = uuidv4();
+        const spaceRegistry = tableCore.getSpaceRegistry();
+        const rowRegistry = tableCore.getRowRegistry();
+        const coordinator = tableCore.getCellCoordinator();
+
+        // Get current space
+        const currentSpace = spaceRegistry.get(spaceId);
+        if (!currentSpace) {
+            console.error(`Space ${spaceId}: Space not found in registry`);
+            return;
+        }
+
+        // Calculate string position for new row
+        let rowString: string;
+        let insertIndex: number;
+
+        if (rowIds.length === 0) {
+            // Empty space - use default position
+            rowString = "20";
+            insertIndex = 0;
+        } else if (position === 'top') {
+            // Insert at top (highest string value)
+            const topRowId = rowIds[0];
+            const topRow = rowRegistry.get(topRowId);
+            const topString = topRow ? extractRowString(topRowId) : "20";
+            rowString = generateHigherString(topString);
+            insertIndex = 0;
+        } else {
+            // Insert at bottom (lowest string value)
+            const bottomRowId = rowIds[rowIds.length - 1];
+            const bottomRow = rowRegistry.get(bottomRowId);
+            const bottomString = bottomRow ? extractRowString(bottomRowId) : "20";
+            rowString = generateLowerString(bottomString);
+            insertIndex = rowIds.length;
+        }
+
+        // Create new row object
+        const newRow: import('../core/types').Row<TData> = {
+            spaceId: spaceId,
+            data: rowData,
+            cells: [],
+            top: null,
+            bottom: null
+        };
+
+        // Register new row
+        rowRegistry.register(newRowId, newRow);
+
+        // Update rowIds state
+        const newRowIds = [...rowIds];
+        newRowIds.splice(insertIndex, 0, newRowId);
+        setRowIds(newRowIds);
+
+        // Update space.rowIds in registry
+        currentSpace.rowIds = newRowIds;
+        spaceRegistry.register(spaceId, currentSpace);
+
+        // Handle cross-space linking after cells are created
+        setTimeout(() => {
+            handleCrossSpaceLinking(newRowId, position);
+        }, 50);
+
+        console.log(`Space ${spaceId}: Row ${newRowId} added at position ${position} with string ${rowString}`);
+    };
+
+    // Extract row string from rowId or calculate from position
+    const extractRowString = (rowId: RowId): string => {
+        // For now, calculate based on position in array
+        const index = rowIds.indexOf(rowId);
+        return ((rowIds.length - index) * 10).toString();
+    };
+
+    // Generate string higher than given string
+    const generateHigherString = (baseString: string): string => {
+        const baseNum = parseInt(baseString) || 20;
+        return (baseNum + 10).toString();
+    };
+
+    // Generate string lower than given string
+    const generateLowerString = (baseString: string): string => {
+        const baseNum = parseInt(baseString) || 20;
+        return Math.max(baseNum - 10, 1).toString();
+    };
+
+    // Handle cross-space linking logic
+    const handleCrossSpaceLinking = (newRowId: RowId, position: 'top' | 'bottom') => {
+        const spaceRegistry = tableCore.getSpaceRegistry();
+        const rowRegistry = tableCore.getRowRegistry();
+        const coordinator = tableCore.getCellCoordinator();
+
+        const newRow = rowRegistry.get(newRowId);
+        if (!newRow || newRow.cells.length === 0) {
+            console.log(`Space ${spaceId}: New row ${newRowId} not ready for linking yet`);
+            return;
+        }
+
+        console.log(`Space ${spaceId}: Starting cross-space linking for row ${newRowId}`);
+
+        // Find space above with rows
+        const spaceAbove = findNearestSpaceWithRows('above');
+        // Find space below with rows
+        const spaceBelow = findNearestSpaceWithRows('below');
+
+        console.log(`Space ${spaceId}: Found spaces - above: ${spaceAbove}, below: ${spaceBelow}`);
+
+        // Link based on position and available spaces
+        if (position === 'top' && rowIds.length === 1) {
+            // First row in space - link to spaces above and below
+            linkToSpaceAbove(newRowId, spaceAbove);
+            linkToSpaceBelow(newRowId, spaceBelow);
+        } else if (position === 'bottom' && rowIds.length === 1) {
+            // First row in space - link to spaces above and below
+            linkToSpaceAbove(newRowId, spaceAbove);
+            linkToSpaceBelow(newRowId, spaceBelow);
+        } else {
+            // Multiple rows in space - link internally first, then handle cross-space
+            linkInternallyAndCrossSpace(newRowId, position, spaceAbove, spaceBelow);
+        }
+    };
+
+    // Find nearest space above or below that has rows
+    const findNearestSpaceWithRows = (direction: 'above' | 'below'): SpaceId | null => {
+        const spaceRegistry = tableCore.getSpaceRegistry();
+        const currentSpace = spaceRegistry.get(spaceId);
+        if (!currentSpace) return null;
+
+        let searchSpaceId = direction === 'above' ? currentSpace.top : currentSpace.bottom;
+
+        while (searchSpaceId) {
+            const searchSpace = spaceRegistry.get(searchSpaceId);
+            if (!searchSpace) break;
+
+            if (searchSpace.rowIds.length > 0) {
+                return searchSpaceId;
+            }
+
+            searchSpaceId = direction === 'above' ? searchSpace.top : searchSpace.bottom;
+        }
+
+        return null;
+    };
+
+    // Link new row to space above
+    const linkToSpaceAbove = (newRowId: RowId, spaceAboveId: SpaceId | null) => {
+        if (!spaceAboveId) return;
+
+        const spaceRegistry = tableCore.getSpaceRegistry();
+        const rowRegistry = tableCore.getRowRegistry();
+        const coordinator = tableCore.getCellCoordinator();
+
+        const spaceAbove = spaceRegistry.get(spaceAboveId);
+        if (!spaceAbove || spaceAbove.rowIds.length === 0) return;
+
+        // Get bottom row of space above
+        const aboveBottomRowId = spaceAbove.rowIds[spaceAbove.rowIds.length - 1];
+        const aboveBottomRow = rowRegistry.get(aboveBottomRowId);
+        const newRow = rowRegistry.get(newRowId);
+
+        if (aboveBottomRow && newRow &&
+            aboveBottomRow.cells.length > 0 && newRow.cells.length > 0) {
+            coordinator.linkRowsCells(aboveBottomRow.cells, newRow.cells);
+            console.log(`Space ${spaceId}: Linked to space above ${spaceAboveId}`);
+        }
+    };
+
+    // Link new row to space below
+    const linkToSpaceBelow = (newRowId: RowId, spaceBelowId: SpaceId | null) => {
+        if (!spaceBelowId) return;
+
+        const spaceRegistry = tableCore.getSpaceRegistry();
+        const rowRegistry = tableCore.getRowRegistry();
+        const coordinator = tableCore.getCellCoordinator();
+
+        const spaceBelow = spaceRegistry.get(spaceBelowId);
+        if (!spaceBelow || spaceBelow.rowIds.length === 0) return;
+
+        // Get top row of space below
+        const belowTopRowId = spaceBelow.rowIds[0];
+        const belowTopRow = rowRegistry.get(belowTopRowId);
+        const newRow = rowRegistry.get(newRowId);
+
+        if (newRow && belowTopRow &&
+            newRow.cells.length > 0 && belowTopRow.cells.length > 0) {
+            coordinator.linkRowsCells(newRow.cells, belowTopRow.cells);
+            console.log(`Space ${spaceId}: Linked to space below ${spaceBelowId}`);
+        }
+    };
+
+    // Handle internal linking + cross-space for multi-row spaces
+    const linkInternallyAndCrossSpace = (newRowId: RowId, position: 'top' | 'bottom', spaceAbove: SpaceId | null, spaceBelow: SpaceId | null) => {
+        const rowRegistry = tableCore.getRowRegistry();
+        const coordinator = tableCore.getCellCoordinator();
+
+        const newRowIndex = rowIds.indexOf(newRowId);
+
+        if (position === 'top') {
+            // Link new row to existing top row
+            if (newRowIndex + 1 < rowIds.length) {
+                const nextRowId = rowIds[newRowIndex + 1];
+                const nextRow = rowRegistry.get(nextRowId);
+                const newRow = rowRegistry.get(newRowId);
+
+                if (newRow && nextRow && newRow.cells.length > 0 && nextRow.cells.length > 0) {
+                    coordinator.linkRowsCells(newRow.cells, nextRow.cells);
+                }
+            }
+            // Link to space above
+            linkToSpaceAbove(newRowId, spaceAbove);
+        } else {
+            // Link existing bottom row to new row
+            if (newRowIndex > 0) {
+                const prevRowId = rowIds[newRowIndex - 1];
+                const prevRow = rowRegistry.get(prevRowId);
+                const newRow = rowRegistry.get(newRowId);
+
+                if (prevRow && newRow && prevRow.cells.length > 0 && newRow.cells.length > 0) {
+                    coordinator.linkRowsCells(prevRow.cells, newRow.cells);
+                }
+            }
+            // Link to space below
+            linkToSpaceBelow(newRowId, spaceBelow);
+        }
+    };
 
     // Initialize with table data if provided
     useEffect(() => {

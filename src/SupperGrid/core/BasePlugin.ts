@@ -1,4 +1,4 @@
-import type { CellCommand, RowCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
+import type { CellCommand, RowCommand, SpaceCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
 
 // Spatial comparison result types
 export type VerticalComparison = {
@@ -17,6 +17,7 @@ export interface TablePluginAPIs {
         targetId: RowId,
         command: Omit<RowCommand<K>, 'targetId' | 'originPlugin' | 'timestamp'>
     ): void;
+    createRow(rowData: any, position?: 'top' | 'bottom'): void;
     getCell(cellId: CellId): Cell | undefined;
     getRow(rowId: RowId): import('./types').Row<any> | undefined;
     compareVertical(cellId1: CellId, cellId2: CellId): VerticalComparison;

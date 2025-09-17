@@ -15,7 +15,8 @@ export const TextCell: CellComponent<string, TextCellConfig> = ({
     registerCommands
 }) => {
     // Initialize state only once, ignore future prop changes
-    const [internalValue, setInternalValue] = useState(() => value || '');
+    // Handle null values explicitly
+    const [internalValue, setInternalValue] = useState(() => value ?? '');
     const [isFocused, setIsFocused] = useState(false);
     const [isSelected, setIsSelected] = useState(false);
     const [isEditing, setIsEditing] = useState(false);

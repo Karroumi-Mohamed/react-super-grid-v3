@@ -1,4 +1,4 @@
-import type { CellCommand, RowCommand, CellId, RowId, CellCommandHandeler, RowCommandMap } from './types';
+import type { CellCommand, RowCommand, SpaceCommand, CellId, RowId, SpaceId, CellCommandHandeler, SpaceCommandHandler, RowCommandMap, SpaceCommandMap } from './types';
 import type { BasePlugin } from './BasePlugin';
 
 export class CellCommandRegistry {
@@ -163,6 +163,73 @@ export class RowCommandRegistry {
                     console.error(`Failed to deliver error command to row ${command.targetId}:`, nestedError);
                 }
             }
+        }
+    }
+}
+
+export class SpaceCommandRegistry {
+    private handlers = new Map<SpaceId, SpaceCommandHandler>();
+    private plugins: BasePlugin[] = [];
+
+    setPlugins(plugins: BasePlugin[]): void {
+        this.plugins = plugins;
+    }
+
+    register(spaceId: SpaceId, handler: SpaceCommandHandler): void {
+        this.handlers.set(spaceId, handler);
+    }
+
+    unregister(spaceId: SpaceId): void {
+        this.handlers.delete(spaceId);
+    }
+
+    dispatch(command: SpaceCommand): void {
+        // Set timestamp if not provided
+        if (!command.timestamp) {
+            (command as any).timestamp = Date.now();
+        }
+
+        // Run command through plugin chain first
+        const shouldContinue = this.runPluginChain(command);
+        if (!shouldContinue) {
+            return; // Command was blocked by a plugin
+        }
+
+        // Deliver to space
+        this.deliverToSpace(command);
+    }
+
+    private runPluginChain<K extends keyof SpaceCommandMap>(command: SpaceCommand<K>): boolean {
+        for (const plugin of this.plugins) {
+            // Skip plugin that created this command (bypass system)
+            if (command.originPlugin === plugin.name) {
+                continue;
+            }
+
+            try {
+                // For now, spaces don't have plugin interception like cells/rows
+                // But we keep the structure for future extensibility
+                // const result = plugin.onBeforeSpaceCommand?.(command);
+                // if (result === false) {
+                //     return false;
+                // }
+            } catch (error) {
+                console.error(`Error in plugin ${plugin.name} space command processing:`, error);
+            }
+        }
+        return true; // Command passed all plugins
+    }
+
+    private deliverToSpace<K extends keyof SpaceCommandMap>(command: SpaceCommand<K>): void {
+        const handler = this.handlers.get(command.targetId);
+        if (handler) {
+            try {
+                handler(command);
+            } catch (error) {
+                console.error(`Error delivering space command to ${command.targetId}:`, error);
+            }
+        } else {
+            console.warn(`No handler registered for space ${command.targetId}`);
         }
     }
 }

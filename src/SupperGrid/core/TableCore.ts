@@ -1,14 +1,17 @@
 import type {
   CellCommand,
   RowCommand,
+  SpaceCommand,
   CellId,
   RowId,
   SpaceId,
   CellCommandHandeler,
+  SpaceCommandHandler,
   RowCommandMap,
+  SpaceCommandMap,
 } from './types';
 import type { TablePluginAPIs, RowPluginAPIs, RowTableAPIs } from './BasePlugin';
-import { CellCommandRegistry, RowCommandRegistry } from './CommandRegistry';
+import { CellCommandRegistry, RowCommandRegistry, SpaceCommandRegistry } from './CommandRegistry';
 import { PluginManager } from './PluginManager';
 import type { BasePlugin } from './BasePlugin';
 import { CellRegistry, RowRegistry, SpaceRegistry } from './Registries';
@@ -18,6 +21,7 @@ import { SpaceCoordinator } from './SpaceCoordinator';
 export class TableCore {
   private cellCommandRegistry: CellCommandRegistry;
   private rowCommandRegistry: RowCommandRegistry;
+  private spaceCommandRegistry: SpaceCommandRegistry;
   private pluginManager: PluginManager;
   private cellRegistry: CellRegistry;
   private rowRegistry: RowRegistry<any>;
@@ -28,6 +32,7 @@ export class TableCore {
   constructor() {
     this.cellCommandRegistry = new CellCommandRegistry();
     this.rowCommandRegistry = new RowCommandRegistry();
+    this.spaceCommandRegistry = new SpaceCommandRegistry();
     this.pluginManager = new PluginManager();
     this.cellRegistry = CellRegistry.getInstance();
     this.rowRegistry = RowRegistry.getInstance();
@@ -61,6 +66,30 @@ export class TableCore {
           timestamp: command.timestamp || Date.now()
         };
         this.rowCommandRegistry.dispatch(contextCommand);
+      },
+
+      createRow: (rowData: any, position?: 'top' | 'bottom') => {
+        // Smart detection: find space owned by this plugin
+        const allSpaces = this.spaceRegistry.list();
+        const pluginSpace = allSpaces.find(space => space.owner === pluginName);
+
+        if (!pluginSpace) {
+          console.error(`Plugin ${pluginName} tried to create row but has no space`);
+          return;
+        }
+
+        const spaceCommand: SpaceCommand<'addRow'> = {
+          name: 'addRow',
+          payload: {
+            rowData,
+            position: position || 'bottom' // Default to bottom if not specified
+          },
+          targetId: pluginSpace.name, // Use space name as ID
+          originPlugin: pluginName,
+          timestamp: Date.now()
+        };
+
+        this.spaceCommandRegistry.dispatch(spaceCommand);
       },
 
       getCell: (cellId: CellId) => {
@@ -240,6 +269,7 @@ export class TableCore {
     const plugins = this.pluginManager.getPlugins();
     this.cellCommandRegistry.setPlugins(plugins);
     this.rowCommandRegistry.setPlugins(plugins);
+    this.spaceCommandRegistry.setPlugins(plugins);
 
     // FINALLY: Initialize plugins after all APIs are set and registries connected
     this.pluginManager.initializePlugins();
@@ -413,6 +443,10 @@ export class TableCore {
 
   getRowCommandRegistry(): RowCommandRegistry {
     return this.rowCommandRegistry;
+  }
+
+  getSpaceCommandRegistry(): SpaceCommandRegistry {
+    return this.spaceCommandRegistry;
   }
 
   getRowRegistry(): RowRegistry<any> {
