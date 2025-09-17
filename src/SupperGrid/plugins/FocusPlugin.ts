@@ -8,41 +8,33 @@ export class FocusPlugin extends BasePlugin {
     private focusedCell: CellId | null = null;
 
     onInit(): void {
-        console.log('FocusPlugin: Initialized');
-        
+
         // Log space information
         if (this.tableAPIs) {
             const mySpace = this.tableAPIs.getMySpace();
-            console.log(`FocusPlugin: My space is ${mySpace}`);
-            
+
             const spaceAbove = this.tableAPIs.getSpaceAbove(mySpace);
             const spaceBelow = this.tableAPIs.getSpaceBelow(mySpace);
-            
-            console.log(`FocusPlugin: Space above: ${spaceAbove || 'none'}`);
-            console.log(`FocusPlugin: Space below: ${spaceBelow || 'none'}`);
-            
+
+
             const spaceData = this.tableAPIs.getSpace(mySpace);
-            console.log(`FocusPlugin: Space data:`, spaceData);
         }
-        
+
         // Example: Delete first row after 5 seconds
+
         setTimeout(() => {
-            console.log('FocusPlugin: Attempting to delete first row after 5s...');
             if (this.tableAPIs) {
                 const rowIds = this.tableAPIs.getRowIds();
                 if (rowIds.length > 0) {
                     const firstRowId = rowIds[0];
-                    console.log(`FocusPlugin: Deleting first row: ${firstRowId}`);
                     this.tableAPIs.deleteRow(firstRowId);
                 } else {
-                    console.log('FocusPlugin: No rows found to delete');
                 }
             }
         }, 5000);
     }
 
     onDestroy(): void {
-        console.log('FocusPlugin: Destroyed');
         this.focusedCell = null;
     }
 
@@ -50,7 +42,6 @@ export class FocusPlugin extends BasePlugin {
         // Check if APIs are initialized
         const { name, targetId } = command;
         if (!this.tableAPIs) {
-            console.warn('FocusPlugin: TableAPIs not initialized yet, skipping command processing');
             return true; // Allow command to continue
         }
 
@@ -62,7 +53,6 @@ export class FocusPlugin extends BasePlugin {
         // Handle keyboard commands without targetId (plugin-only)
         if (!targetId && name === 'keydown') {
             const event = command.payload.event;
-            console.log('Keyboard command received:', event.key);
 
             if (this.isArrow(event.key)) {
                 event.preventDefault();
@@ -81,39 +71,49 @@ export class FocusPlugin extends BasePlugin {
     }
 
     private handleNavigation(direction: string) {
-        if (!this.focusedCell) return;
+        if (!this.focusedCell) {
+            return;
+        }
+
+
+        const currentCell = this.tableAPIs?.getCell(this.focusedCell);
+        if (!currentCell) {
+            return;
+        }
+
+
         switch (direction) {
             case 'ArrowUp':
-                const top = this.tableAPIs?.getCell(this.focusedCell)?.top
+                const top = currentCell.top;
                 if (top) {
                    this.focusCell(top)
+                } else {
                 }
                 break;
             case 'ArrowDown':
-                const bottom = this.tableAPIs?.getCell(this.focusedCell)?.bottom
+                const bottom = currentCell.bottom;
                 if (bottom) {
                    this.focusCell(bottom)
+                } else {
                 }
                 break;
             case 'ArrowLeft':
-                const left = this.tableAPIs?.getCell(this.focusedCell)?.left
+                const left = currentCell.left;
                 if (left) {
                    this.focusCell(left)
+                } else {
                 }
                 break;
             case 'ArrowRight':
-                const right = this.tableAPIs?.getCell(this.focusedCell)?.right
+                const right = currentCell.right;
                 if (right) {
                    this.focusCell(right)
+                } else {
                 }
                 break;
-
-
-
             default:
                 break;
         }
-
     }
 
     private isArrow(key: string) {

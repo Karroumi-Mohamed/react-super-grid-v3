@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler, RowCommandHandler } from './core/types';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, type JSX } from 'react';
+import type { TableProps, RowProps, RowId, CellId, CellCommand, Cell, CellCommandHandeler, RowCommandHandler, SpaceId } from './core/types';
 import { TableCore } from './core/TableCore';
 import type { BasePlugin } from './core/BasePlugin';
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from './core/utils';
+import { Space } from './components/Space';
 
 interface SuperGridProps<TData> extends TableProps<TData> {
     plugins?: BasePlugin[];
@@ -90,95 +91,65 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         };
     }, [plugins]);
 
-    // Store row IDs to maintain stable UUIDs and proper linking
-    const rowIdsRef = useRef<RowId[]>([]);
-
-    // Link cells vertically across rows after all rows are rendered
+    // TODO: Implement cross-space cell linking
+    // This will link cells between spaces (e.g., bottom cells of Space A to top cells of Table Space)
     useEffect(() => {
-        if (tableCoreReady && tableCoreRef.current && rowIdsRef.current.length > 1) {
-            console.log('SuperGrid: Linking cells vertically across rows');
-
-            const rowRegistry = tableCoreRef.current.getRowRegistry();
-            const coordinator = tableCoreRef.current.getCellCoordinator();
-
-            // Use visual order from rowIdsRef (which matches data array order)
-            for (let i = 0; i < rowIdsRef.current.length - 1; i++) {
-                const currentRowId = rowIdsRef.current[i];     // Visual position i
-                const nextRowId = rowIdsRef.current[i + 1];    // Visual position i+1
-
-                const currentRow = rowRegistry.get(currentRowId);
-                const nextRow = rowRegistry.get(nextRowId);
-
-                console.log(`SuperGrid: Linking row ${i} (${currentRowId.slice(0, 8)}...) to row ${i + 1} (${nextRowId.slice(0, 8)}...)`);
-
-                if (currentRow && nextRow &&
-                    currentRow.cells.length === nextRow.cells.length) {
-                    // Link corresponding cells between visually adjacent rows
-                    coordinator.linkRowsCells(currentRow.cells, nextRow.cells);
-                    console.log(`SuperGrid: Linked ${currentRow.cells.length} cells between rows`);
-                } else {
-                    console.warn(`SuperGrid: Cannot link rows ${i} and ${i + 1} - missing data or cell count mismatch`);
-                }
-            }
-            console.log('SuperGrid: Vertical cell linking completed');
+        if (tableCoreReady && tableCoreRef.current) {
+            // For now, each space handles its internal cell linking
         }
-    }, [data, tableCoreReady]); // Re-run when data changes or table becomes ready
+    }, [data, tableCoreReady]);
 
-    // Create row components with context-aware APIs
-    const renderRows = () => {
-        // Ensure we have stable UUIDs for each row
-        if (rowIdsRef.current.length !== data.length) {
-            // Generate UUIDs for new rows or adjust for removed rows
-            const newRowIds: RowId[] = [];
-            for (let i = 0; i < data.length; i++) {
-                if (i < rowIdsRef.current.length) {
-                    newRowIds[i] = rowIdsRef.current[i]; // Keep existing UUID
-                } else {
-                    newRowIds[i] = uuidv4(); // Generate new UUID
-                }
-            }
-            rowIdsRef.current = newRowIds;
+    // Render spaces in plugin dependency order + table space at bottom
+    const renderSpaces = () => {
+        if (!tableCoreRef.current || !tableCoreReady) {
+            return null;
         }
 
-        return data.map((rowData, index) => {
-            const rowId: RowId = rowIdsRef.current[index];
-            const isLastRow = index === data.length - 1;
+        const spaces: JSX.Element[] = [];
 
-            // Create context-aware API for this specific row
-            if (!tableCoreRef.current || !tableCoreReady) {
-                console.log('not created yet');
-                return null
-            }
+        // Get plugin spaces in dependency order (first processed = top)
+        const orderedPlugins = tableCoreRef.current.getPluginManager().getPluginsInOrder();
 
-            console.log('created');
-
-            // Create and register the Row object in the row registry
-            const rowObject: import('./core/types').Row<TData> = {
-                spaceId: 'default-space', // For now use default space
-                data: rowData,
-                cells: [], // Will be populated by the row component
-                top: index > 0 ? rowIdsRef.current[index - 1] : null,
-                bottom: index < data.length - 1 ? rowIdsRef.current[index + 1] : null
-            };
-
-            // Register the row object
-            const tableCore = tableCoreRef.current;
-            tableCore.getRowRegistry().register(rowId, rowObject);
-
-            const tableApis = tableCoreRef.current.createRowAPI(rowId);
-
-            // Create row props with the bound API
-            const rowProps: RowProps<TData> = {
-                id: rowId,
-                data: rowData,
-                columns: config,
-                tableApis, // This is the context-aware API bound to this row's ID
-                rowIndex: index, // Pass the row index for spatial coordinates
-                isLastRow // Pass whether this is the last row
-            };
-
-            return <GridRow key={rowId} {...rowProps} />;
+        // Render plugin spaces (empty for now, will be populated by SpaceCommands later)
+        orderedPlugins.forEach(plugin => {
+            const spaceId: SpaceId = `space-${plugin.name}`;
+            spaces.push(
+                <Space
+                    key={spaceId}
+                    spaceId={spaceId}
+                    tableCore={tableCoreRef.current!}
+                    config={config}
+                />
+            );
         });
+
+        // Create and render table space at the bottom with initial data
+        const tableSpaceId: SpaceId = 'table-space';
+
+        // Create table space in registry if it doesn't exist
+        const spaceRegistry = tableCoreRef.current.getSpaceRegistry();
+        if (!spaceRegistry.has(tableSpaceId)) {
+            const tableSpace: import('./core/types').Space = {
+                name: 'Table Space',
+                owner: 'table',
+                top: null,
+                bottom: null,
+                rowIds: []
+            };
+            spaceRegistry.register(tableSpaceId, tableSpace);
+        }
+
+        spaces.push(
+            <Space
+                key={tableSpaceId}
+                spaceId={tableSpaceId}
+                tableCore={tableCoreRef.current!}
+                config={config}
+                initialData={data} // Pass initial data to table space
+            />
+        );
+
+        return spaces;
     };
 
     return (
@@ -200,51 +171,47 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
                     </div>
                 ))}
             </div>
-            {/* Data rows */}
+            {/* Spaces: Plugin spaces (top) + Table space (bottom) */}
             <div className="w-full">
-                {renderRows()}
+                {renderSpaces()}
             </div>
         </div>
     );
 });
 
 // Row component that uses the context-aware TableRowAPI
-function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TData>) {
+export function GridRow<TData>({ id, data, columns, tableApis, rowIndex, rowString }: RowProps<TData>) {
     const [isDestroyed, setIsDestroyed] = useState(false);
     const renderCountRef = useRef(0);
-    
+
     // Increment render counter and log
     renderCountRef.current += 1;
-    console.log(`GridRow ${id.slice(0, 8)}... render #${renderCountRef.current} (rowIndex: ${rowIndex})`);
-    
+
     // Generate stable cell IDs with spatial coordinates (only once per row instance)
     const cellIdsRef = useRef<CellId[]>([]);
 
     // Initialize cell IDs with spatial coordinates if not already done
     if (cellIdsRef.current.length !== columns.length) {
         cellIdsRef.current = columns.map((_, colIndex) =>
-            `${colIndex.toString().padStart(2, '0')}-${rowIndex.toString().padStart(2, '0')}-${uuidv4()}`
-            // Example: "01-02-a1b2c3d4-e5f6-7890-abcd-ef1234567890" (col=1, row=2)
+            `${colIndex.toString().padStart(2, '0')}-${rowString}-${uuidv4()}`
+            // New format: "01-30-a1b2c3d4-e5f6-7890-abcd-ef1234567890" (col=1, row="30")
         );
     }
 
     // Register row command handler
     useEffect(() => {
         const handleRowCommand: RowCommandHandler = (command) => {
-            console.log(`GridRow ${id}: Received row command:`, command.name);
             switch (command.name) {
                 case 'destroy':
-                    console.log(`GridRow ${id}: Destroying row`);
                     setIsDestroyed(true);
                     break;
                 default:
-                    console.log(`GridRow ${id}: Unhandled row command:`, command.name);
                     break;
             }
         };
-        
+
         tableApis.registerRowHandler(handleRowCommand);
-        
+
         return () => {
             tableApis.unregisterRowHandler();
         };
@@ -260,7 +227,6 @@ function GridRow<TData>({ id, data, columns, tableApis, rowIndex }: RowProps<TDa
 
     // If row is destroyed, render nothing (React will unmount all child cells)
     if (isDestroyed) {
-        console.log(`GridRow ${id.slice(0, 8)}... render #${renderCountRef.current} - DESTROYED, returning null`);
         return null;
     }
 

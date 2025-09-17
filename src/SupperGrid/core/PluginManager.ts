@@ -5,14 +5,12 @@ export class PluginManager implements IPluginManager {
     private initializationOrder: string[] = [];
 
     addPlugin(plugin: BasePlugin): void {
-        console.log(`PluginManager: Adding plugin ${plugin.name}`);
         if (this.plugins.has(plugin.name)) {
             throw new Error(`Plugin ${plugin.name} is already registered`);
         }
 
         this.plugins.set(plugin.name, plugin);
         plugin.setPluginManager(this);
-        console.log(`PluginManager: Plugin ${plugin.name} added successfully`);
     }
 
     removePlugin(pluginName: string): void {
@@ -21,7 +19,7 @@ export class PluginManager implements IPluginManager {
             plugin.onDestroy();
         }
         this.plugins.delete(pluginName);
-        
+
         // Remove from initialization order
         const index = this.initializationOrder.indexOf(pluginName);
         if (index !== -1) {
@@ -50,22 +48,19 @@ export class PluginManager implements IPluginManager {
 
     initializePlugins(): void {
         this.resolveAndOrderPlugins();
-        
+
         for (const pluginName of this.initializationOrder) {
             const plugin = this.plugins.get(pluginName);
             if (plugin && plugin.onInit) {
                 try {
                     plugin.onInit();
                 } catch (error) {
-                    console.error(`Error initializing plugin ${pluginName}:`, error);
                 }
             }
         }
     }
 
     private resolveAndOrderPlugins(): void {
-        console.log('PluginManager: Starting dependency resolution with processLast support');
-        console.log('PluginManager: Available plugins:', Array.from(this.plugins.keys()));
 
         // Step 1: Separate plugins by their initial processLast flag
         const initialProcessLastPlugins = new Set<string>();
@@ -90,7 +85,6 @@ export class PluginManager implements IPluginManager {
                     // Check if this normal plugin depends on any processLast plugin
                     for (const dependency of plugin.dependencies) {
                         if (finalProcessLastPlugins.has(dependency)) {
-                            console.log(`PluginManager: Moving ${pluginName} to processLast phase (depends on ${dependency})`);
                             finalProcessLastPlugins.add(pluginName);
                             changed = true;
                             break;
@@ -108,8 +102,6 @@ export class PluginManager implements IPluginManager {
             }
         }
 
-        console.log('PluginManager: Normal plugins:', Array.from(normalPlugins));
-        console.log('PluginManager: ProcessLast plugins:', Array.from(finalProcessLastPlugins));
 
         // Step 4: Resolve dependencies in each phase
         const normalOrder = this.resolveDependencies(normalPlugins, allPlugins, 'normal');
@@ -117,8 +109,7 @@ export class PluginManager implements IPluginManager {
 
         // Step 5: Combine the orders
         const finalOrder = [...normalOrder, ...processLastOrder];
-        
-        console.log('PluginManager: Final dependency order:', finalOrder);
+
         this.initializationOrder = finalOrder;
     }
 
@@ -127,17 +118,14 @@ export class PluginManager implements IPluginManager {
         const visiting = new Set<string>();
         const order: string[] = [];
 
-        console.log(`PluginManager: Resolving ${phase} plugins:`, Array.from(pluginSet));
 
         const visit = (pluginName: string) => {
-            console.log(`PluginManager: Visiting ${phase} plugin ${pluginName}`);
-            
+
             if (visiting.has(pluginName)) {
                 throw new Error(`Circular dependency detected involving plugin: ${pluginName}`);
             }
-            
+
             if (visited.has(pluginName)) {
-                console.log(`PluginManager: Plugin ${pluginName} already visited, skipping`);
                 return;
             }
 
@@ -146,7 +134,6 @@ export class PluginManager implements IPluginManager {
                 throw new Error(`Plugin ${pluginName} is required as a dependency but not found`);
             }
 
-            console.log(`PluginManager: Plugin ${pluginName} has dependencies:`, plugin.dependencies);
             visiting.add(pluginName);
 
             // Visit all dependencies first (they should all be in current set now after phase adjustment)
@@ -162,7 +149,6 @@ export class PluginManager implements IPluginManager {
             visiting.delete(pluginName);
             visited.add(pluginName);
             order.push(pluginName);
-            console.log(`PluginManager: Added ${pluginName} to ${phase} order, current order:`, [...order]);
         };
 
         // Visit all plugins in the current set
@@ -172,7 +158,6 @@ export class PluginManager implements IPluginManager {
             }
         }
 
-        console.log(`PluginManager: ${phase} phase order:`, order);
         return order;
     }
 
@@ -185,7 +170,6 @@ export class PluginManager implements IPluginManager {
                 try {
                     plugin.onDestroy();
                 } catch (error) {
-                    console.error(`Error destroying plugin ${pluginName}:`, error);
                 }
             }
         }

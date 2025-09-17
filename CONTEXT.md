@@ -90,13 +90,13 @@ Commands are strongly typed with automatic payload validation:
 
 ```typescript
 // Commands without payload
-type CellCommandNoPayload = 
+type CellCommandNoPayload =
   | { name: "focus" }
   | { name: "blur" }
   | { name: "select" }
   | { name: "edit" };
 
-// Commands with payload  
+// Commands with payload
 type CellCommandWithPayload =
   | { name: "updateValue"; payload: { value: any } }
   | { name: "click"; payload: { event: MouseEvent } }
@@ -210,7 +210,7 @@ The `CellCoordinator` manages spatial relationships between cells and rows:
 type Cell = {
   rowId: RowId;
   top: CellId | null;
-  bottom: CellId | null; 
+  bottom: CellId | null;
   left: CellId | null;
   right: CellId | null;
 };
@@ -227,7 +227,7 @@ type Row<T> = {
 
 #### Navigation Methods
 - `linkVertical(topId, bottomId)` - Connect cells vertically
-- `linkHorizontal(leftId, rightId)` - Connect cells horizontally  
+- `linkHorizontal(leftId, rightId)` - Connect cells horizontally
 - `linkRows(topRowId, bottomRowId)` - Connect entire rows
 - `linkRowsCells(topCells[], bottomCells[])` - Connect corresponding cells between rows
 
@@ -240,7 +240,7 @@ type Row<T> = {
 // ✅ Correct: Initialize state once from props
 const [internalValue, setInternalValue] = useState(() => value || '');
 
-// ❌ Wrong: Would cause rerenders on data changes  
+// ❌ Wrong: Would cause rerenders on data changes
 const [internalValue, setInternalValue] = useState(value || '');
 
 // ✅ Correct: Updates come via commands
@@ -255,7 +255,7 @@ case 'updateValue':
 
 #### State Ownership
 - **Table**: Knows layout, coordinates events, manages plugins
-- **Rows**: Manage cell registration and event routing  
+- **Rows**: Manage cell registration and event routing
 - **Cells**: Own all their state (focus, value, selection, editing)
 
 ## Current Implementation Status
@@ -288,12 +288,7 @@ case 'updateValue':
    - State initialization from props
    - Command-driven state updates
 
-### 🚧 In Progress
 
-1. **Layout System**
-   - Basic flex layout implemented
-   - Column width support
-   - Row rendering issues (timing problems)
 
 ### 📋 Planned Features
 

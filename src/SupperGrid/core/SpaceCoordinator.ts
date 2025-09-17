@@ -37,7 +37,8 @@ export class SpaceCoordinator {
       name: `${pluginName} Space`,
       owner: pluginName,
       top: null,
-      bottom: null
+      bottom: null,
+      rowIds: [] // Initialize empty rowIds array
     };
 
     // Find the bottom-most space

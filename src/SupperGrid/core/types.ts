@@ -7,6 +7,7 @@ type Space = {
     owner?: string; // plugin name or table if no owner
     top: SpaceId | null;
     bottom: SpaceId | null;
+    rowIds: RowId[]; // Track rows in this space
 };
 
 type Row<T> = {
@@ -158,6 +159,7 @@ type RowProps<T> = {
     columns: TableConfig<T>;
     tableApis: TableRowAPI;
     rowIndex: number;
+    rowString: string; // String-based row position for cell ID generation
     isLastRow?: boolean;
 };
 

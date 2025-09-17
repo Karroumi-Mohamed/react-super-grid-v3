@@ -14,7 +14,7 @@ export type HorizontalComparison = {
 export interface TablePluginAPIs {
     createCellCommand(targetId: CellId, command: Omit<CellCommand, 'targetId' | 'originPlugin' | 'timestamp'>): void;
     createRowCommand<K extends keyof import('./types').RowCommandMap>(
-        targetId: RowId, 
+        targetId: RowId,
         command: Omit<RowCommand<K>, 'targetId' | 'originPlugin' | 'timestamp'>
     ): void;
     getCell(cellId: CellId): Cell | undefined;
@@ -36,7 +36,7 @@ export interface RowPluginAPIs {
 
 export interface RowTableAPIs {
     registerRowHandler<K extends keyof import('./types').RowCommandMap>(
-        rowId: RowId, 
+        rowId: RowId,
         handler: (command: RowCommand<K>) => void
     ): void;
     unregisterRowHandler(rowId: RowId): void;
@@ -74,15 +74,9 @@ export abstract class BasePlugin {
 
     // API access
     setAPIs(tableAPIs: TablePluginAPIs, rowAPIs: RowPluginAPIs, rowTableAPIs: RowTableAPIs): void {
-        console.log(`BasePlugin: Setting APIs for plugin ${this.name}`, {
-            tableAPIs: !!tableAPIs,
-            rowAPIs: !!rowAPIs,
-            rowTableAPIs: !!rowTableAPIs
-        });
         this.tableAPIs = tableAPIs;
         this.rowAPIs = rowAPIs;
         this.rowTableAPIs = rowTableAPIs;
-        console.log(`BasePlugin: APIs now set for ${this.name}, tableAPIs:`, !!this.tableAPIs);
     }
 
     setPluginManager(manager: PluginManager): void {
