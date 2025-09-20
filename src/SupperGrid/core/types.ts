@@ -16,6 +16,7 @@ type Row<T> = {
     cells: CellId[];
     top: RowId | null;
     bottom: RowId | null;
+    rowString: string; // String position for Y indexing
 };
 
 type Cell = {

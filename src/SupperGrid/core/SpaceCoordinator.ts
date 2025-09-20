@@ -1,5 +1,6 @@
 import type { SpaceRegistry } from "./Registries";
 import type { SpaceId, Space } from "./types";
+import { v4 as uuidv4 } from 'uuid';
 
 export class SpaceCoordinator {
   private static instance: SpaceCoordinator | null = null;
@@ -31,7 +32,7 @@ export class SpaceCoordinator {
 
   // Create a new space for a plugin and link it to the bottom of the chain
   createPluginSpace(pluginName: string): SpaceId {
-    const spaceId = `space-${pluginName}`;
+    const spaceId = uuidv4(); // Use UUID as space ID
     
     const newSpace: Space = {
       name: `${pluginName} Space`,

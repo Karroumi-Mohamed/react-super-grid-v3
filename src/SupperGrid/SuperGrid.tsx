@@ -24,6 +24,7 @@ export interface SuperGridRef {
 export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function SuperGrid<TData>({ data, config, plugins = [] }: SuperGridProps<TData>, ref: React.Ref<SuperGridRef>) {
     const tableCoreRef = useRef<TableCore | null>(null);
     const [tableCoreReady, setTableCoreReady] = useState(false);
+    const mountedRef = useRef(false);
 
     // Expose TableCore methods through ref
     useImperativeHandle(ref, () => ({
@@ -52,17 +53,24 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
     }), []);
 
     useEffect(() => {
+        mountedRef.current = true;
+
         if (!tableCoreRef.current) {
             tableCoreRef.current = new TableCore();
-
-            // Add plugins
-            plugins.forEach(plugin => {
-                tableCoreRef.current!.addPlugin(plugin);
-            });
-
-            // Initialize plugins with their context-aware APIs
-            tableCoreRef.current.initializePlugins();
         }
+
+        // Always add plugins to ensure they're available on every TableCore instance
+        plugins.forEach(plugin => {
+            try {
+                tableCoreRef.current!.addPlugin(plugin);
+            } catch (error) {
+                // Plugin already registered, which is fine in StrictMode
+                console.log(`Plugin ${plugin.name} already registered, skipping`);
+            }
+        });
+
+        // Initialize plugins with their context-aware APIs
+        tableCoreRef.current.initializePlugins();
 
         setTableCoreReady(true);
 
@@ -84,12 +92,27 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
         document.addEventListener('keyup', handleKeyUp);
 
         return () => {
-            // Cleanup on unmount
+            // Cleanup event listeners
             document.removeEventListener('keydown', handleKeyDown);
             document.removeEventListener('keyup', handleKeyUp);
-            tableCoreRef.current?.destroy();
+
+            // Only destroy TableCore if component is actually unmounting
+            // In StrictMode, this cleanup runs twice, but we only want to destroy once
+            if (!mountedRef.current) {
+                tableCoreRef.current?.destroy();
+                tableCoreRef.current = null;
+            }
         };
-    }, []); // Remove plugins dependency to prevent recreation
+    }, []); // No dependencies - only run once
+
+    // Cleanup on actual unmount
+    useEffect(() => {
+        return () => {
+            mountedRef.current = false;
+            tableCoreRef.current?.destroy();
+            tableCoreRef.current = null;
+        };
+    }, []);
 
     // TODO: Implement cross-space cell linking
     // This will link cells between spaces (e.g., bottom cells of Space A to top cells of Table Space)
@@ -109,18 +132,35 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
 
         // Get plugin spaces in dependency order (first processed = top)
         const orderedPlugins = tableCoreRef.current.getPluginManager().getPluginsInOrder();
+        console.log('📋 SuperGrid: orderedPlugins:', orderedPlugins.map(p => p.name));
 
-        // Render plugin spaces (empty for now, will be populated by SpaceCommands later)
+        // Render plugin spaces using actual space IDs from registry
+        const allSpaceIds = tableCoreRef.current.getSpaceRegistry().list();
+        console.log('🏛️ SuperGrid: allSpaceIds:', allSpaceIds);
+
         orderedPlugins.forEach(plugin => {
-            const spaceId: SpaceId = `space-${plugin.name}`;
-            spaces.push(
-                <Space
-                    key={spaceId}
-                    spaceId={spaceId}
-                    tableCore={tableCoreRef.current!}
-                    config={config}
-                />
-            );
+            // Find the space that belongs to this plugin
+            let pluginSpaceId: SpaceId | null = null;
+            for (const spaceId of allSpaceIds) {
+                const space = tableCoreRef.current!.getSpaceRegistry().get(spaceId);
+                console.log(`🔍 SuperGrid: Checking space ${spaceId}, owner: ${space?.owner}, plugin: ${plugin.name}`);
+                if (space && space.owner === plugin.name) {
+                    pluginSpaceId = spaceId;
+                    break;
+                }
+            }
+
+            console.log(`🎯 SuperGrid: Plugin ${plugin.name} → Space ${pluginSpaceId}`);
+            if (pluginSpaceId) {
+                spaces.push(
+                    <Space
+                        key={pluginSpaceId}
+                        spaceId={pluginSpaceId}
+                        tableCore={tableCoreRef.current!}
+                        config={config}
+                    />
+                );
+            }
         });
 
         // Create and render table space at the bottom with initial data
@@ -234,7 +274,7 @@ export function GridRow<TData>({ id, data, columns, tableApis, rowString }: RowP
         <div className="w-full flex" data-row-id={id}>
             {columns.map((column, index) => {
                 const cellId = cellIdsRef.current[index];
-                const cellValue = data[column.key];
+                const cellValue = data ? data[column.key] : null;
                 const previousCellId = index > 0 ? cellIdsRef.current[index - 1] : null;
                 const nextCellId = index < columns.length - 1 ? cellIdsRef.current[index + 1] : null;
 

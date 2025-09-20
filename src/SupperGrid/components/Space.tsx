@@ -12,17 +12,10 @@ interface SpaceProps<TData> {
     initialData?: TData[]; // Only for table space
 }
 
-// Extract row string from row cells (cellId format: "colIndex-rowString-uuid")
-function extractRowStringFromRow(rowId: RowId, tableCore: TableCore): string {
+// Get row string directly from row object
+function getRowString(rowId: RowId, tableCore: TableCore): string {
     const row = tableCore.getRowRegistry().get(rowId);
-    if (row && row.cells.length > 0) {
-        const firstCellId = row.cells[0];
-        const parts = firstCellId.split('-');
-        if (parts.length >= 3) {
-            return parts[1]; // The row string part
-        }
-    }
-    return "20"; // Fallback
+    return row?.rowString || "20"; // Fallback
 }
 
 export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceProps<TData>) {
@@ -71,7 +64,7 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         }
 
         // Get existing row strings for position calculation
-        const existingRowStrings = rowIds.map(rowId => extractRowStringFromRow(rowId, tableCore));
+        const existingRowStrings = rowIds.map(rowId => getRowString(rowId, tableCore));
 
         // Generate new position string using utility
         const rowString = StringPositionGenerator.generatePositionString(existingRowStrings, position);
@@ -86,7 +79,8 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
             data: rowData,
             cells: [],
             top: null,
-            bottom: null
+            bottom: null,
+            rowString: rowString
         };
 
         // Register new row
@@ -260,13 +254,17 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
             for (let i = initialData.length - 1; i >= 0; i--) {
                 const rowId = uuidv4();
 
+                // Generate Y position string - reverse order for descending positions
+                const rowString = (30 - (i * 10)).toString();
+
                 // Create Row object
                 const rowObject: import('../core/types').Row<TData> = {
                     spaceId: spaceId,
                     data: initialData[i],
                     cells: [],
                     top: previousRowRef.current,
-                    bottom: null
+                    bottom: null,
+                    rowString: rowString
                 };
 
                 // Link to previous row
@@ -315,8 +313,8 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
 
                 const tableApis = tableCore.createRowAPI(rowId);
 
-                // Extract string position from row's cells
-                const stringPosition = extractRowStringFromRow(rowId, tableCore);
+                // Get string position from row object
+                const stringPosition = getRowString(rowId, tableCore);
 
                 const rowProps: RowProps<TData> = {
                     id: rowId,

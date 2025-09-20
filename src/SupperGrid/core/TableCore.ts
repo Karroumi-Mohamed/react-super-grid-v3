@@ -16,6 +16,9 @@ import { CellRegistry, RowRegistry, SpaceRegistry } from './Registries';
 import { CellCoordinator } from './CellCordinator';
 import { SpaceCoordinator } from './SpaceCoordinator';
 
+// Global initialization state to handle React StrictMode
+let globalPluginInitialized = false;
+
 export class TableCore {
   private cellCommandRegistry: CellCommandRegistry;
   private rowCommandRegistry: RowCommandRegistry;
@@ -26,6 +29,7 @@ export class TableCore {
   private spaceRegistry: SpaceRegistry;
   private cellCoordinator: CellCoordinator;
   private spaceCoordinator: SpaceCoordinator;
+  private pluginsInitialized = false;
 
   constructor() {
     this.cellCommandRegistry = new CellCommandRegistry();
@@ -245,25 +249,19 @@ export class TableCore {
 
   // Initialize all plugins with their context-aware APIs
   initializePlugins(): void {
+    console.log('TableCore: Setting up plugins and registries');
 
-    // FIRST: Resolve plugin dependencies to get proper order
-    // We need to call this directly since pluginManager.initializePlugins()
-    // does dependency resolution internally but we need the order first
+    // ALWAYS: Resolve plugin dependencies and set up spaces/APIs for this TableCore instance
     this.pluginManager.resolvePluginDependencies();
-
-    // Get plugins in dependency order (now this will work)
     const orderedPlugins = this.pluginManager.getPluginsInOrder();
 
-    // SECOND: Create spaces for all plugins and set APIs
+    // Create spaces and set APIs for all plugins (needed for each TableCore)
     for (const plugin of orderedPlugins) {
-
-      // Create a space for this plugin
+      // Create a space for this plugin (if not already created)
       this.spaceCoordinator.createPluginSpace(plugin.name);
 
       // Create context-aware APIs for this specific plugin
       const tableAPI = this.createPluginAPI(plugin.name);
-
-      // TODO: Implement these API factories later
       const rowAPI: RowPluginAPIs = {} as RowPluginAPIs;
       const rowTableAPI: RowTableAPIs = {} as RowTableAPIs;
 
@@ -271,19 +269,30 @@ export class TableCore {
       plugin.setAPIs(tableAPI, rowAPI, rowTableAPI);
     }
 
-    // THIRD: Connect plugins to command registries (now APIs are ready)
+    // Connect plugins to command registries (needed for each TableCore)
     const plugins = this.pluginManager.getPlugins();
     this.cellCommandRegistry.setPlugins(plugins);
     this.rowCommandRegistry.setPlugins(plugins);
     this.spaceCommandRegistry.setPlugins(plugins);
 
-    // FINALLY: Initialize plugins after all APIs are set and registries connected
-    this.pluginManager.initializePlugins();
+    // ONLY ONCE: Initialize plugins globally to prevent duplicate timers
+    if (!globalPluginInitialized) {
+      globalPluginInitialized = true;
+      this.pluginsInitialized = true;
+      console.log('TableCore: Initializing plugins for the first time');
+      this.pluginManager.initializePlugins();
+    } else {
+      console.log('TableCore: Plugins already initialized globally, skipping onInit() calls');
+    }
   }
 
   // Cleanup
   destroy(): void {
-    this.pluginManager.destroy();
+    if (this.pluginsInitialized) {
+      console.log('TableCore: Destroying plugins');
+      this.pluginManager.destroy();
+      this.pluginsInitialized = false;
+    }
   }
 
   // Command dispatching methods

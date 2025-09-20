@@ -1,5 +1,5 @@
 import { BasePlugin } from '../core/BasePlugin';
-import type { CellCommand, RowCommand } from '../core/types';
+import type { CellCommand, RowCommand, RowCommandMap } from '../core/types';
 
 export class CreateRowTesterLast extends BasePlugin {
     name = 'createRowTesterLast';
@@ -11,7 +11,7 @@ export class CreateRowTesterLast extends BasePlugin {
         // Allow all cell commands
     }
 
-    onBeforeRowCommand(_command: RowCommand<any>): boolean | void {
+    onBeforeRowCommand<K extends keyof RowCommandMap>(_command: RowCommand<K>): boolean | void {
         // Allow all row commands
     }
 

@@ -3,6 +3,7 @@ import type { BasePlugin, PluginManager as IPluginManager } from './BasePlugin';
 export class PluginManager implements IPluginManager {
     private plugins = new Map<string, BasePlugin>();
     private initializationOrder: string[] = [];
+    private initialized = false;
 
     addPlugin(plugin: BasePlugin): void {
         if (this.plugins.has(plugin.name)) {
@@ -47,14 +48,23 @@ export class PluginManager implements IPluginManager {
     }
 
     initializePlugins(): void {
+        if (this.initialized) {
+            console.log('PluginManager: Already initialized, skipping duplicate initialization');
+            return;
+        }
+
+        this.initialized = true;
+        console.log('PluginManager: Initializing plugins for the first time');
         this.resolveAndOrderPlugins();
 
         for (const pluginName of this.initializationOrder) {
             const plugin = this.plugins.get(pluginName);
             if (plugin && plugin.onInit) {
                 try {
+                    console.log(`PluginManager: Initializing plugin ${pluginName}`);
                     plugin.onInit();
                 } catch (error) {
+                    console.error(`PluginManager: Error initializing plugin ${pluginName}:`, error);
                 }
             }
         }
@@ -162,19 +172,28 @@ export class PluginManager implements IPluginManager {
     }
 
     destroy(): void {
+        if (!this.initialized) {
+            console.log('PluginManager: Not initialized, skipping destroy');
+            return;
+        }
+
+        console.log('PluginManager: Destroying plugins');
         // Destroy in reverse order
         for (let i = this.initializationOrder.length - 1; i >= 0; i--) {
             const pluginName = this.initializationOrder[i];
             const plugin = this.plugins.get(pluginName);
             if (plugin && plugin.onDestroy) {
                 try {
+                    console.log(`PluginManager: Destroying plugin ${pluginName}`);
                     plugin.onDestroy();
                 } catch (error) {
+                    console.error(`PluginManager: Error destroying plugin ${pluginName}:`, error);
                 }
             }
         }
 
         this.plugins.clear();
         this.initializationOrder = [];
+        this.initialized = false;
     }
 }
