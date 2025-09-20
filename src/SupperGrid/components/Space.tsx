@@ -13,6 +13,10 @@ interface SpaceProps<TData> {
 
 export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceProps<TData>) {
     const [rowIds, setRowIds] = useState<RowId[]>([]);
+    const renderCountRef = useRef(0);
+    const initializedRef = useRef(false);
+    renderCountRef.current += 1;
+    console.log(`🔄 Space ${spaceId} render #${renderCountRef.current}, rowIds.length: ${rowIds.length}, initialData?.length: ${initialData?.length}`);
     const previousRowRef = useRef<RowId | null>(null);
 
     // Register SpaceCommand handler
@@ -43,9 +47,8 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         console.log(`Space ${spaceId}: Adding row at ${position}`, rowData);
 
         const newRowId = uuidv4();
-        const spaceRegistry = tableCore.getSpaceRegistry();
         const rowRegistry = tableCore.getRowRegistry();
-        const coordinator = tableCore.getCellCoordinator();
+        const spaceRegistry = tableCore.getSpaceRegistry();
 
         // Get current space
         const currentSpace = spaceRegistry.get(spaceId);
@@ -128,9 +131,7 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
 
     // Handle cross-space linking logic
     const handleCrossSpaceLinking = (newRowId: RowId, position: 'top' | 'bottom') => {
-        const spaceRegistry = tableCore.getSpaceRegistry();
         const rowRegistry = tableCore.getRowRegistry();
-        const coordinator = tableCore.getCellCoordinator();
 
         const newRow = rowRegistry.get(newRowId);
         if (!newRow || newRow.cells.length === 0) {
@@ -188,8 +189,8 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
     const linkToSpaceAbove = (newRowId: RowId, spaceAboveId: SpaceId | null) => {
         if (!spaceAboveId) return;
 
-        const spaceRegistry = tableCore.getSpaceRegistry();
         const rowRegistry = tableCore.getRowRegistry();
+        const spaceRegistry = tableCore.getSpaceRegistry();
         const coordinator = tableCore.getCellCoordinator();
 
         const spaceAbove = spaceRegistry.get(spaceAboveId);
@@ -211,8 +212,8 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
     const linkToSpaceBelow = (newRowId: RowId, spaceBelowId: SpaceId | null) => {
         if (!spaceBelowId) return;
 
-        const spaceRegistry = tableCore.getSpaceRegistry();
         const rowRegistry = tableCore.getRowRegistry();
+        const spaceRegistry = tableCore.getSpaceRegistry();
         const coordinator = tableCore.getCellCoordinator();
 
         const spaceBelow = spaceRegistry.get(spaceBelowId);
@@ -266,9 +267,12 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         }
     };
 
-    // Initialize with table data if provided
+    // Initialize with table data if provided (only once)
     useEffect(() => {
-        if (initialData && initialData.length > 0) {
+        console.log(`🔍 Space ${spaceId} useEffect triggered - initialData: ${initialData?.length}, rowIds: ${rowIds.length}, initialized: ${initializedRef.current}`);
+        if (initialData && initialData.length > 0 && rowIds.length === 0 && !initializedRef.current) {
+            console.log(`✅ Space ${spaceId} CREATING ${initialData.length} INITIAL ROWS`);
+            initializedRef.current = true;
 
             previousRowRef.current = null;
             const newRowIds: RowId[] = [];
@@ -276,7 +280,6 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
             // Create rows in visual order: top to bottom ("30", "20", "10")
             for (let i = initialData.length - 1; i >= 0; i--) {
                 const rowId = uuidv4();
-                const stringPosition = ((i + 1) * 10).toString();
 
                 // Create Row object
                 const rowObject: import('../core/types').Row<TData> = {
@@ -304,10 +307,11 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
 
             setRowIds(newRowIds);
         }
-    }, [spaceId, tableCore, initialData]);
+    }, [spaceId, tableCore]);
 
     // Link cells when a new row gets its cells registered
     const linkRowCells = (currentRowId: RowId) => {
+        const coordinator = tableCore.getCellCoordinator();
         const currentRow = tableCore.getRowRegistry().get(currentRowId);
 
         if (!currentRow || !currentRow.top) return;
@@ -319,8 +323,7 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         if (topRow.cells.length > 0 && currentRow.cells.length > 0 &&
             topRow.cells.length === currentRow.cells.length) {
 
-            const coordinator = tableCore.getCellCoordinator();
-            coordinator.linkRowsCells(topRow.cells, currentRow.cells);
+                coordinator.linkRowsCells(topRow.cells, currentRow.cells);
         }
     };
 

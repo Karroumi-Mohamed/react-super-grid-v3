@@ -6,9 +6,7 @@ import type {
   RowId,
   SpaceId,
   CellCommandHandeler,
-  SpaceCommandHandler,
   RowCommandMap,
-  SpaceCommandMap,
 } from './types';
 import type { TablePluginAPIs, RowPluginAPIs, RowTableAPIs } from './BasePlugin';
 import { CellCommandRegistry, RowCommandRegistry, SpaceCommandRegistry } from './CommandRegistry';
@@ -70,10 +68,18 @@ export class TableCore {
 
       createRow: (rowData: any, position?: 'top' | 'bottom') => {
         // Smart detection: find space owned by this plugin
-        const allSpaces = this.spaceRegistry.list();
-        const pluginSpace = allSpaces.find(space => space.owner === pluginName);
+        const allSpaceIds = this.spaceRegistry.list();
+        let pluginSpaceId: SpaceId | null = null;
 
-        if (!pluginSpace) {
+        for (const spaceId of allSpaceIds) {
+          const space = this.spaceRegistry.get(spaceId);
+          if (space && space.owner === pluginName) {
+            pluginSpaceId = spaceId;
+            break;
+          }
+        }
+
+        if (!pluginSpaceId) {
           console.error(`Plugin ${pluginName} tried to create row but has no space`);
           return;
         }
@@ -84,7 +90,7 @@ export class TableCore {
             rowData,
             position: position || 'bottom' // Default to bottom if not specified
           },
-          targetId: pluginSpace.name, // Use space name as ID
+          targetId: pluginSpaceId,
           originPlugin: pluginName,
           timestamp: Date.now()
         };
@@ -252,7 +258,7 @@ export class TableCore {
     for (const plugin of orderedPlugins) {
 
       // Create a space for this plugin
-      const spaceId = this.spaceCoordinator.createPluginSpace(plugin.name);
+      this.spaceCoordinator.createPluginSpace(plugin.name);
 
       // Create context-aware APIs for this specific plugin
       const tableAPI = this.createPluginAPI(plugin.name);

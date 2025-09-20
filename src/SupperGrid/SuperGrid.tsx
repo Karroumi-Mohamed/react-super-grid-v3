@@ -180,7 +180,7 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
 });
 
 // Row component that uses the context-aware TableRowAPI
-export function GridRow<TData>({ id, data, columns, tableApis, rowIndex, rowString }: RowProps<TData>) {
+export function GridRow<TData>({ id, data, columns, tableApis, rowString }: RowProps<TData>) {
     const [isDestroyed, setIsDestroyed] = useState(false);
     const renderCountRef = useRef(0);
 

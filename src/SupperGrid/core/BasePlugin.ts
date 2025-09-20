@@ -1,4 +1,4 @@
-import type { CellCommand, RowCommand, SpaceCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
+import type { CellCommand, RowCommand, CellId, RowId, SpaceId, Cell, Space } from './types';
 
 // Spatial comparison result types
 export type VerticalComparison = {

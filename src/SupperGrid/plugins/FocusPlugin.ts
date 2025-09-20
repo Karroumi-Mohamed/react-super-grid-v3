@@ -11,13 +11,7 @@ export class FocusPlugin extends BasePlugin {
 
         // Log space information
         if (this.tableAPIs) {
-            const mySpace = this.tableAPIs.getMySpace();
-
-            const spaceAbove = this.tableAPIs.getSpaceAbove(mySpace);
-            const spaceBelow = this.tableAPIs.getSpaceBelow(mySpace);
-
-
-            const spaceData = this.tableAPIs.getSpace(mySpace);
+            // Space info logged for debugging
         }
 
         // Example: Delete first row after 5 seconds

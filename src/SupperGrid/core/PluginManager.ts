@@ -104,8 +104,8 @@ export class PluginManager implements IPluginManager {
 
 
         // Step 4: Resolve dependencies in each phase
-        const normalOrder = this.resolveDependencies(normalPlugins, allPlugins, 'normal');
-        const processLastOrder = this.resolveDependencies(finalProcessLastPlugins, allPlugins, 'processLast');
+        const normalOrder = this.resolveDependencies(normalPlugins, allPlugins);
+        const processLastOrder = this.resolveDependencies(finalProcessLastPlugins, allPlugins);
 
         // Step 5: Combine the orders
         const finalOrder = [...normalOrder, ...processLastOrder];
@@ -113,7 +113,7 @@ export class PluginManager implements IPluginManager {
         this.initializationOrder = finalOrder;
     }
 
-    private resolveDependencies(pluginSet: Set<string>, allPlugins: Map<string, BasePlugin>, phase: string): string[] {
+    private resolveDependencies(pluginSet: Set<string>, allPlugins: Map<string, BasePlugin>): string[] {
         const visited = new Set<string>();
         const visiting = new Set<string>();
         const order: string[] = [];

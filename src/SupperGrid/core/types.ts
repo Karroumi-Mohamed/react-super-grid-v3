@@ -121,7 +121,7 @@ type SpaceCommand<K extends keyof SpaceCommandMap = keyof SpaceCommandMap> = {
   timestamp?: number;
 };
 
-export type { CellCommand, RowCommand, RowCommandMap, SpaceCommand, SpaceCommandMap };
+export type { CellCommand, RowCommand, RowCommandMap, SpaceCommand, SpaceCommandMap, SpaceCommandHandler };
 
 
 type CellCommandHandeler = (command: CellCommand) => void;
