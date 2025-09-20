@@ -3,6 +3,7 @@ import type { RowId, SpaceId, TableConfig, RowProps, SpaceCommand, SpaceCommandH
 import type { TableCore } from '../core/TableCore';
 import { GridRow } from '../SuperGrid';
 import { v4 as uuidv4 } from 'uuid';
+import { StringPositionGenerator } from '../core/utils';
 
 interface SpaceProps<TData> {
     spaceId: SpaceId;
@@ -11,12 +12,24 @@ interface SpaceProps<TData> {
     initialData?: TData[]; // Only for table space
 }
 
+// Extract row string from row cells (cellId format: "colIndex-rowString-uuid")
+function extractRowStringFromRow(rowId: RowId, tableCore: TableCore): string {
+    const row = tableCore.getRowRegistry().get(rowId);
+    if (row && row.cells.length > 0) {
+        const firstCellId = row.cells[0];
+        const parts = firstCellId.split('-');
+        if (parts.length >= 3) {
+            return parts[1]; // The row string part
+        }
+    }
+    return "20"; // Fallback
+}
+
 export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceProps<TData>) {
     const [rowIds, setRowIds] = useState<RowId[]>([]);
     const renderCountRef = useRef(0);
     const initializedRef = useRef(false);
     renderCountRef.current += 1;
-    console.log(`🔄 Space ${spaceId} render #${renderCountRef.current}, rowIds.length: ${rowIds.length}, initialData?.length: ${initialData?.length}`);
     const previousRowRef = useRef<RowId | null>(null);
 
     // Register SpaceCommand handler
@@ -57,29 +70,15 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
             return;
         }
 
-        // Calculate string position for new row
-        let rowString: string;
-        let insertIndex: number;
+        // Get existing row strings for position calculation
+        const existingRowStrings = rowIds.map(rowId => extractRowStringFromRow(rowId, tableCore));
 
-        if (rowIds.length === 0) {
-            // Empty space - use default position
-            rowString = "20";
-            insertIndex = 0;
-        } else if (position === 'top') {
-            // Insert at top (highest string value)
-            const topRowId = rowIds[0];
-            const topRow = rowRegistry.get(topRowId);
-            const topString = topRow ? extractRowString(topRowId) : "20";
-            rowString = generateHigherString(topString);
-            insertIndex = 0;
-        } else {
-            // Insert at bottom (lowest string value)
-            const bottomRowId = rowIds[rowIds.length - 1];
-            const bottomRow = rowRegistry.get(bottomRowId);
-            const bottomString = bottomRow ? extractRowString(bottomRowId) : "20";
-            rowString = generateLowerString(bottomString);
-            insertIndex = rowIds.length;
-        }
+        // Generate new position string using utility
+        const rowString = StringPositionGenerator.generatePositionString(existingRowStrings, position);
+        console.log(`Space ${spaceId}: Generated position string: ${rowString} for ${position} insertion`);
+
+        // Determine insert index based on position
+        const insertIndex = position === 'top' ? 0 : rowIds.length;
 
         // Create new row object
         const newRow: import('../core/types').Row<TData> = {
@@ -110,24 +109,6 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         console.log(`Space ${spaceId}: Row ${newRowId} added at position ${position} with string ${rowString}`);
     };
 
-    // Extract row string from rowId or calculate from position
-    const extractRowString = (rowId: RowId): string => {
-        // For now, calculate based on position in array
-        const index = rowIds.indexOf(rowId);
-        return ((rowIds.length - index) * 10).toString();
-    };
-
-    // Generate string higher than given string
-    const generateHigherString = (baseString: string): string => {
-        const baseNum = parseInt(baseString) || 20;
-        return (baseNum + 10).toString();
-    };
-
-    // Generate string lower than given string
-    const generateLowerString = (baseString: string): string => {
-        const baseNum = parseInt(baseString) || 20;
-        return Math.max(baseNum - 10, 1).toString();
-    };
 
     // Handle cross-space linking logic
     const handleCrossSpaceLinking = (newRowId: RowId, position: 'top' | 'bottom') => {
@@ -269,9 +250,7 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
 
     // Initialize with table data if provided (only once)
     useEffect(() => {
-        console.log(`🔍 Space ${spaceId} useEffect triggered - initialData: ${initialData?.length}, rowIds: ${rowIds.length}, initialized: ${initializedRef.current}`);
         if (initialData && initialData.length > 0 && rowIds.length === 0 && !initializedRef.current) {
-            console.log(`✅ Space ${spaceId} CREATING ${initialData.length} INITIAL ROWS`);
             initializedRef.current = true;
 
             previousRowRef.current = null;
@@ -327,21 +306,17 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
         }
     };
 
-    // Render rows
-    if (rowIds.length === 0) {
-        return null;
-    }
-
+    // Always render space (even empty) for handler registration and zero UI footprint
     return (
-        <div className="space-container" data-space-id={spaceId}>
+        <>
             {rowIds.map((rowId, index) => {
                 const row = tableCore.getRowRegistry().get(rowId);
                 if (!row) return null;
 
                 const tableApis = tableCore.createRowAPI(rowId);
 
-                // Calculate string position for cell IDs
-                const stringPosition = ((rowIds.length - index) * 10).toString();
+                // Extract string position from row's cells
+                const stringPosition = extractRowStringFromRow(rowId, tableCore);
 
                 const rowProps: RowProps<TData> = {
                     id: rowId,
@@ -361,7 +336,7 @@ export function Space<TData>({ spaceId, tableCore, config, initialData }: SpaceP
                     />
                 );
             })}
-        </div>
+        </>
     );
 }
 

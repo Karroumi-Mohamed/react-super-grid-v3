@@ -5,6 +5,8 @@ import { TextCell } from './SupperGrid/cells/TextCell'
 import { FocusPlugin } from './SupperGrid/plugins/FocusPlugin'
 import './App.css'
 import { SelectPlugin } from './SupperGrid/plugins/SelectionPlugin';
+import { CreateRowTesterFirst } from './SupperGrid/plugins/CreateRowTesterFirst';
+import { CreateRowTesterLast } from './SupperGrid/plugins/CreateRowTesterLast';
 
 function App() {
   const gridRef = useRef<SuperGridRef>(null);
@@ -12,6 +14,8 @@ function App() {
   // Create plugin instances
   const focusPlugin = new FocusPlugin();
   const selectPlugin = new SelectPlugin();
+  const rowTesterFirst = new CreateRowTesterFirst();
+  const rowTesterLast = new CreateRowTesterLast();
 
   // Sample data
   const data = [
@@ -73,7 +77,7 @@ function App() {
         ref={gridRef}
         data={data}
         config={config}
-        plugins={[focusPlugin, selectPlugin]}
+        plugins={[focusPlugin, selectPlugin, rowTesterFirst, rowTesterLast]}
       />
     </div>
   )

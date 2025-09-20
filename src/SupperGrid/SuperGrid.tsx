@@ -89,7 +89,7 @@ export const SuperGrid = forwardRef<SuperGridRef, SuperGridProps<any>>(function 
             document.removeEventListener('keyup', handleKeyUp);
             tableCoreRef.current?.destroy();
         };
-    }, [plugins]);
+    }, []); // Remove plugins dependency to prevent recreation
 
     // TODO: Implement cross-space cell linking
     // This will link cells between spaces (e.g., bottom cells of Space A to top cells of Table Space)
